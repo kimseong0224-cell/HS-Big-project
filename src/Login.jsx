@@ -4,9 +4,8 @@ export default function LoginApp() {
       <div className="login-shell split">
         <section className="login-hero navy-panel">
           <div className="hero-top">
-            <span className="hero-title-line">Smart</span>
-            <span className="hero-title-line">Management,</span>
-            <span className="hero-title-line">Smart Start.</span>
+            <span className="hero-title-line">여러분의 새로운 시작</span>
+            <span className="hero-title-line">BrandPliot이 함께 합니다.</span>
           </div>
           <p className="hero-copy subtle">
             가장 완벽한 분석으로
@@ -46,9 +45,9 @@ export default function LoginApp() {
             <div className="login-divider" />
             <div className="signup-row">
               <div className="signup-copy">
-                회원가입하고 BrandPliot의
+                회원가입하고 <strong>BrandPliot</strong>의
                 <br></br>
-                <strong> 더 많은 인사이트</strong>를 얻어보세요!
+                <strong>더 많은 인사이트</strong>를 얻어보세요!
               </div>
               <button type="button" className="signup-cta">
                 회원가입
