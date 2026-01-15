@@ -37,15 +37,14 @@ export default function DiagnosisHome({ onLogout }) {
     };
   }, [brandOpen]);
 
+  // ✅ 브랜드 컨설팅 메뉴 클릭 -> BrandConsulting 페이지로 이동
   const handleBrandItem = (action) => {
     setBrandOpen(false);
-    const map = {
-      concept: "컨셉 컨설팅",
-      naming: "네이밍 컨설팅",
-      logo: "로고 컨설팅",
-      homepage: "홈페이지 컨설팅",
-    };
-    alert(`${map[action]} 클릭 (테스트)`);
+
+    // 필요하면 action을 쿼리/파라미터로 넘길 수도 있음:
+    // navigate(`/brandconsulting?tab=${action}`);
+
+    navigate("/brandconsulting");
   };
 
   // ✅ 메인페이지와 동일하게: 기업진단 버튼 클릭 시 이 페이지(/diagnosis) 유지
@@ -192,6 +191,8 @@ export default function DiagnosisHome({ onLogout }) {
             className={`nav-dropdown ${brandOpen ? "is-open" : ""}`}
             ref={brandRef}
           >
+            {/* ✅ 드롭다운 버튼 자체를 눌러도 BrandConsulting으로 이동하게 하고 싶으면 onDoubleClick/아이콘 분리도 가능
+                지금은 "버튼 클릭은 드롭다운 열기" 유지 */}
             <button
               type="button"
               className="nav-link nav-dropdown__btn"
@@ -233,6 +234,15 @@ export default function DiagnosisHome({ onLogout }) {
                 onClick={() => handleBrandItem("homepage")}
               >
                 홈페이지 컨설팅
+              </button>
+
+              {/* ✅ "전체 BrandConsulting 페이지로 이동" 버튼을 따로 두고 싶으면 이거도 추천 */}
+              <button
+                type="button"
+                className="nav-dropdown__item"
+                onClick={() => navigate("/brandconsulting")}
+              >
+                브랜드 컨설팅 페이지로 이동
               </button>
             </div>
           </div>
@@ -380,8 +390,7 @@ export default function DiagnosisHome({ onLogout }) {
         </section>
       </main>
 
-      {/* ✅ Footer: DiagnosisHome 형식으로 통일(공통 컴포넌트) */}
-      <SiteFooter onOpenPolicy={setOpenType} />
+      <SiteFooter />
     </div>
   );
 }
