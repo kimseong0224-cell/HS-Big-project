@@ -2,7 +2,7 @@ import analyzeCompany from "../main_image/companyanalyze.png";
 import makeset from "../main_image/Brandingconsult.png";
 import story from "../main_image/PromotionalConsulting.png";
 
-export default function MainPage({ onLogout }) {
+export default function MainPage({ onLogout, onBrand }) {
   return (
     <div className="main-page">
       <header className="main-header">
@@ -34,7 +34,7 @@ export default function MainPage({ onLogout }) {
       <main className="main-content">
         <h2 className="section-title">컨설팅 시작하기</h2>
         <div className="card-grid">
-          <article className="info-card">
+          <article className="info-card" >
             <div className="card-image">
               <img src={analyzeCompany} alt="기업 진단 & 인터뷰" />
             </div>
@@ -46,7 +46,7 @@ export default function MainPage({ onLogout }) {
               </p>
             </div>
           </article>
-          <article className="info-card">
+          <article className="info-card" onClick={onBrand}>
             <div className="card-image alt">
               <img src={makeset} alt="브랜드 컨설팅" />
             </div>

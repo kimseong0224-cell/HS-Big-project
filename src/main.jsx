@@ -5,11 +5,13 @@ import SignupApp from "./pages/Signup.jsx";
 import FindID from "./pages/FindID.jsx";
 import FindPassword from "./pages/FindPassword.jsx";
 import MainPage from "./pages/MainPage.jsx";
+import BrandConsulting from "./pages/BrandConsulting.jsx";
 import "./styles/Login.css";
 import "./styles/Signup.css";
 import "./styles/FindID.css";
 import "./styles/FindPassword.css";
 import "./styles/MainPage.css";
+import "./styles/BrandConsulting.css";
 
 function App() {
   const [view, setView] = useState("login");
@@ -27,7 +29,16 @@ function App() {
   }
 
   if (view === "main") {
-    return <MainPage onLogout={() => setView("login")} />;
+    return <MainPage onLogout={() => setView("login")} onBrand={() => setView("brand")} />;
+  }
+
+  if (view === "brand") {
+    return (
+      <BrandConsulting
+        onBack={() => setView("main")}
+        onLogout={() => setView("login")}
+      />
+    );
   }
 
   return (
