@@ -1,12 +1,10 @@
 // src/pages/DiagnosisHome.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "../styles/DiagnosisHome.css";
 
 export default function DiagnosisHome() {
   const navigate = useNavigate();
 
-  // ✅ 브랜드 컨설팅 드롭다운(모바일 클릭용)
   const [brandOpen, setBrandOpen] = useState(false);
   const brandRef = useRef(null);
 
@@ -39,7 +37,6 @@ export default function DiagnosisHome() {
     alert(`${map[action]} 클릭 (테스트)`);
   };
 
-  // ✅ 4칸 프로세스
   const steps = useMemo(
     () => [
       {
@@ -66,7 +63,6 @@ export default function DiagnosisHome() {
     []
   );
 
-  // ===== localStorage 진행률(테스트용) =====
   const [draft, setDraft] = useState(null);
 
   const loadDraft = () => {
@@ -130,7 +126,6 @@ export default function DiagnosisHome() {
 
   return (
     <div className="diagHome">
-      {/* ✅ 메인과 동일한 “이전 헤더 배치” */}
       <header className="main-header">
         <div
           className="brand"
@@ -145,7 +140,11 @@ export default function DiagnosisHome() {
         </div>
 
         <nav className="main-nav" aria-label="주요 메뉴">
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => navigate("/diagnosis")}
+          >
             기업 진단 &amp; 인터뷰
           </button>
 
@@ -162,11 +161,7 @@ export default function DiagnosisHome() {
               브랜드 컨설팅 <span className="nav-dropdown__chev">▾</span>
             </button>
 
-            <div
-              className="nav-dropdown__panel"
-              role="menu"
-              aria-label="브랜드 컨설팅 메뉴"
-            >
+            <div className="nav-dropdown__panel" role="menu">
               <button
                 type="button"
                 className="nav-dropdown__item"
@@ -198,7 +193,11 @@ export default function DiagnosisHome() {
             </div>
           </div>
 
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => alert("홍보물 컨설팅 (테스트)")}
+          >
             홍보물 컨설팅
           </button>
         </nav>
@@ -211,20 +210,29 @@ export default function DiagnosisHome() {
           >
             홈
           </button>
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => alert("마이페이지 (테스트)")}
+          >
             마이페이지
           </button>
           <button
             type="button"
             className="nav-link"
-            onClick={() => alert("로그아웃(테스트)")}
+            onClick={() => {
+              alert("로그아웃(테스트)");
+              navigate("/login");
+            }}
           >
             로그아웃
           </button>
         </div>
       </header>
 
+      {/* ✅ 이하 너 코드 그대로 */}
       <main className="diagHome__main">
+        {/* ... (동일) */}
         <section className="diagHome__heroCard">
           <p className="diagHome__heroText">
             간단한 정보를 입력하면 AI가 빠르게 분석하고, 주요 문제와 추천 전략을

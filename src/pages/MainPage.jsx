@@ -1,14 +1,12 @@
 // src/pages/MainPage.jsx
 import React, { useEffect, useRef, useState } from "react";
-import "../styles/MainPage.css";
+import { useNavigate } from "react-router-dom";
 
 import analyzeCompany from "../main_image/companyanalyze.png";
 import makeset from "../main_image/Brandingconsult.png";
 import story from "../main_image/PromotionalConsulting.png";
 
-import { useNavigate } from "react-router-dom";
-
-export default function MainPage({ onLogout }) {
+export default function MainPage() {
   const navigate = useNavigate();
   const handleDiagnosisClick = () => navigate("/diagnosis");
 
@@ -43,18 +41,17 @@ export default function MainPage({ onLogout }) {
       homepage: "홈페이지 컨설팅",
     };
     alert(`${map[action]} 클릭 (테스트)`);
-    // 실제 라우팅 연결 시 예:
-    // navigate(`/brand/${action}`);
+    // 실제 라우팅 연결 예: navigate(`/brand/${action}`);
   };
 
   const handleLogout = () => {
-    if (typeof onLogout === "function") onLogout();
-    else navigate("/");
+    alert("로그아웃(테스트)");
+    navigate("/login");
   };
 
   return (
     <div className="main-page">
-      {/* ✅ (이전처럼) 로고-메뉴-계정 오른쪽 배치 */}
+      {/* ✅ 로고-메뉴-계정 오른쪽 배치 */}
       <header className="main-header">
         <div
           className="brand"
@@ -127,7 +124,11 @@ export default function MainPage({ onLogout }) {
             </div>
           </div>
 
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => alert("홍보물 컨설팅 (테스트)")}
+          >
             홍보물 컨설팅
           </button>
         </nav>
@@ -140,7 +141,11 @@ export default function MainPage({ onLogout }) {
           >
             홈
           </button>
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => alert("마이페이지 (테스트)")}
+          >
             마이페이지
           </button>
           <button type="button" className="nav-link" onClick={handleLogout}>
@@ -175,7 +180,16 @@ export default function MainPage({ onLogout }) {
             </div>
           </article>
 
-          <article className="info-card">
+          <article
+            className="info-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => alert("브랜드 컨설팅 (테스트)")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ")
+                alert("브랜드 컨설팅 (테스트)");
+            }}
+          >
             <div className="card-image alt">
               <img src={makeset} alt="브랜드 컨설팅" />
             </div>
@@ -188,7 +202,16 @@ export default function MainPage({ onLogout }) {
             </div>
           </article>
 
-          <article className="info-card">
+          <article
+            className="info-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => alert("홍보물 컨설팅 (테스트)")}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ")
+                alert("홍보물 컨설팅 (테스트)");
+            }}
+          >
             <div className="card-image third">
               <img src={story} alt="홍보물 컨설팅" />
             </div>
@@ -202,14 +225,18 @@ export default function MainPage({ onLogout }) {
           </article>
         </div>
 
-        {/* ✅ 투자유치 섹션(복구) */}
+        {/* ✅ 투자유치 섹션(원본 그대로 포함) */}
         <section className="deal-board" aria-label="투자 유치 게시판">
           <div className="deal-header">
             <div>
               <p className="deal-eyebrow">초기 스타트업과 함께 해주세요!</p>
               <h3 className="deal-title">스타트업 투자유치</h3>
             </div>
-            <button type="button" className="deal-more">
+            <button
+              type="button"
+              className="deal-more"
+              onClick={() => alert("전체보기 (테스트)")}
+            >
               전체보기 &gt;
             </button>
           </div>
@@ -230,7 +257,12 @@ export default function MainPage({ onLogout }) {
               </div>
               <div className="deal-footer">
                 <strong>[series A] 92억+ TIPS 투자유치</strong>
-                <button type="button">투자성과 뉴스</button>
+                <button
+                  type="button"
+                  onClick={() => alert("투자성과 뉴스 (테스트)")}
+                >
+                  투자성과 뉴스
+                </button>
               </div>
             </article>
 
@@ -249,7 +281,12 @@ export default function MainPage({ onLogout }) {
               </div>
               <div className="deal-footer">
                 <strong>[series C 이상] 409억 투자유치</strong>
-                <button type="button">투자성과 뉴스</button>
+                <button
+                  type="button"
+                  onClick={() => alert("투자성과 뉴스 (테스트)")}
+                >
+                  투자성과 뉴스
+                </button>
               </div>
             </article>
 
@@ -268,7 +305,12 @@ export default function MainPage({ onLogout }) {
               </div>
               <div className="deal-footer">
                 <strong>[pre-IPO] 170억 투자완료</strong>
-                <button type="button">투자성과 뉴스</button>
+                <button
+                  type="button"
+                  onClick={() => alert("투자성과 뉴스 (테스트)")}
+                >
+                  투자성과 뉴스
+                </button>
               </div>
             </article>
 
@@ -287,7 +329,12 @@ export default function MainPage({ onLogout }) {
               </div>
               <div className="deal-footer">
                 <strong>[seed] 18억 투자완료</strong>
-                <button type="button">투자성과 뉴스</button>
+                <button
+                  type="button"
+                  onClick={() => alert("투자성과 뉴스 (테스트)")}
+                >
+                  투자성과 뉴스
+                </button>
               </div>
             </article>
 
@@ -306,7 +353,12 @@ export default function MainPage({ onLogout }) {
               </div>
               <div className="deal-footer">
                 <strong>[series A] 65억 투자유치</strong>
-                <button type="button">투자성과 뉴스</button>
+                <button
+                  type="button"
+                  onClick={() => alert("투자성과 뉴스 (테스트)")}
+                >
+                  투자성과 뉴스
+                </button>
               </div>
             </article>
 
@@ -325,7 +377,12 @@ export default function MainPage({ onLogout }) {
               </div>
               <div className="deal-footer">
                 <strong>[series B] 210억 투자완료</strong>
-                <button type="button">투자성과 뉴스</button>
+                <button
+                  type="button"
+                  onClick={() => alert("투자성과 뉴스 (테스트)")}
+                >
+                  투자성과 뉴스
+                </button>
               </div>
             </article>
           </div>

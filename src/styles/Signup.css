@@ -1,3 +1,4 @@
+/* src/styles/FindPassword.css */
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700&display=swap");
 
 :root {
@@ -178,11 +179,11 @@ input:focus {
 /* 버튼 2개를 좌우로 */
 .button-row {
   display: flex;
-  gap: 12px;            /* 버튼 사이 간격 */
+  gap: 12px; /* 버튼 사이 간격 */
   margin-top: 12px;
 }
 
 /* 버튼이 반반 차지 */
 .button-row button {
-  flex: 1;              /* ⭐ 핵심 */
+  flex: 1; /* ⭐ 핵심 */
 }

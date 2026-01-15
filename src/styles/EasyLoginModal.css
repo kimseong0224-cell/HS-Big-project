@@ -1,0 +1,175 @@
+/* src/styles/EasyLoginModal.css */
+:root {
+  --navy: #001f66;
+  --blue: #1766e5;
+  --text: #111827;
+  --muted: #8a90a3;
+  --line: #d9deea;
+  --panel: #ffffff;
+}
+
+.easyModal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 18, 35, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.easyModal__panel {
+  width: min(460px, 94vw);
+  background: var(--panel);
+  border: 1px solid rgba(238, 241, 246, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  padding: 20px 18px 16px;
+  animation: easyModalPop 0.14s ease-out;
+}
+
+@keyframes easyModalPop {
+  from {
+    transform: translateY(8px) scale(0.985);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.easyModal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 6px 10px;
+}
+
+.easyModal__title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
+
+.easyModal__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.easyModal__close {
+  border: 1px solid #e7ebf3;
+  background: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 900;
+  color: #2b3550;
+}
+
+.easyModal__close:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.easyModal__providers {
+  display: grid;
+  gap: 10px;
+  padding: 8px 6px 2px;
+}
+
+.easyModal__providerBtn {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 10px;
+
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.12s ease, border-color 0.12s;
+}
+
+.easyModal__providerBtn:hover {
+  border-color: #b9cffc;
+  box-shadow: 0 10px 22px rgba(17, 24, 39, 0.08);
+}
+
+.easyModal__providerBtn:active {
+  transform: translateY(1px);
+}
+
+.easyModal__providerBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.easyModal__icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(0, 31, 102, 0.08);
+  border: 1px solid rgba(0, 31, 102, 0.12);
+  color: var(--navy);
+  font-weight: 900;
+}
+
+.easyModal__text {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.easyModal__right {
+  font-size: 12px;
+  color: var(--blue);
+  font-weight: 900;
+  padding-left: 8px;
+}
+
+.easyModal__divider {
+  height: 1px;
+  background: #eef1f6;
+  margin: 14px 6px 10px;
+}
+
+.easyModal__bottom {
+  padding: 4px 6px 4px;
+  display: grid;
+  gap: 8px;
+}
+
+.easyModal__ghost {
+  border: 1px solid #d9deea;
+  border-radius: 12px;
+  padding: 11px 0;
+  background: #fff;
+  color: #4f5665;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.easyModal__ghost:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.easyModal__footnote {
+  margin: 0;
+  font-size: 11px;
+  color: #9aa1b2;
+  text-align: center;
+  line-height: 1.4;
+}

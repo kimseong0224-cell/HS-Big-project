@@ -1,3 +1,4 @@
+/* src/styles/FindID.css */
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap");
 
 :root {
@@ -7,6 +8,7 @@
   --muted: #8a90a3;
   --line: #d9deea;
   --panel: #ffffff;
+  --danger: #ef4444;
 }
 
 * {
@@ -84,12 +86,51 @@ input:focus {
   line-height: 1.5;
 }
 
-.result {
+/* ✅ 안내/에러 */
+.notice {
   margin: -6px 0 4px;
   font-size: 12px;
   color: #1b4fd8;
   text-align: center;
   font-weight: 600;
+}
+
+.error {
+  margin: -6px 0 4px;
+  font-size: 12px;
+  color: var(--danger);
+  text-align: center;
+  font-weight: 700;
+}
+
+/* ✅ 결과 박스(마스킹 이메일 표시) */
+.resultBox {
+  border: 1px solid #e6ebf5;
+  background: #f7f9ff;
+  border-radius: 14px;
+  padding: 14px 14px;
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  margin-top: -6px;
+}
+
+.resultLabel {
+  font-size: 12px;
+  color: #5c6476;
+  font-weight: 700;
+}
+
+.resultValue {
+  font-size: 14px;
+  font-weight: 800;
+  color: #1b4fd8;
+  letter-spacing: 0.2px;
+}
+
+.resultHint {
+  font-size: 11px;
+  color: #8a90a3;
 }
 
 .primary {
