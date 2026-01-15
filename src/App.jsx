@@ -8,6 +8,7 @@ import FindPassword from "./pages/FindPassword.jsx";
 import MainPage from "./pages/MainPage.jsx";
 import DiagnosisHome from "./pages/DiagnosisHome.jsx";
 import EasyLogin from "./pages/EasyLogin.jsx";
+import BrandConsulting from "./pages/BrandConsulting.jsx";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
 
       <Route path="/diagnosis" element={<DiagnosisHome />} />
       <Route path="/easylogin" element={<EasyLogin />} />
+      <Route path="/brandconsulting" element={<BrandConsulting />} />
 
       {/* 없는 경로는 메인으로 */}
       <Route path="*" element={<Navigate to="/main" replace />} />

@@ -1,7 +1,6 @@
 // src/pages/DiagnosisHome.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "../styles/DiagnosisHome.css";
 
 import SiteFooter from "../components/SiteFooter.jsx";
 

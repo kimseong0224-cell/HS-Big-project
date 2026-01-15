@@ -1,18 +1,30 @@
 // // src/pages/MainPage.jsx
 // import React, { useEffect, useRef, useState } from "react";
+
+// import analyzeCompany from "../Image/main_image/companyanalyze.png";
+// import makeset from "../Image/main_image/Brandingconsult.png";
+// import story from "../Image/main_image/PromotionalConsulting.png";
+
 // import { useNavigate } from "react-router-dom";
 
-// import analyzeCompany from "../main_image/companyanalyze.png";
-// import makeset from "../main_image/Brandingconsult.png";
-// import story from "../main_image/PromotionalConsulting.png";
+// // ✅ 모달/콘텐츠(이미 만들어둔 파일 재사용)
+// import PolicyModal from "../components/PolicyModal.jsx";
+// import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
-// export default function MainPage() {
+// // ✅ footer를 공통 컴포넌트로 통일
+// import SiteFooter from "../components/SiteFooter.jsx";
+
+// export default function MainPage({ onLogout }) {
 //   const navigate = useNavigate();
 //   const handleDiagnosisClick = () => navigate("/diagnosis");
 
 //   // ✅ 브랜드 컨설팅 드롭다운 (모바일 클릭용 상태 + 바깥 클릭 닫기)
 //   const [brandOpen, setBrandOpen] = useState(false);
 //   const brandRef = useRef(null);
+
+//   // ✅ 약관/방침 모달 상태: "privacy" | "terms" | null
+//   const [openType, setOpenType] = useState(null);
+//   const closeModal = () => setOpenType(null);
 
 //   useEffect(() => {
 //     const onDown = (e) => {
@@ -41,17 +53,35 @@
 //       homepage: "홈페이지 컨설팅",
 //     };
 //     alert(`${map[action]} 클릭 (테스트)`);
-//     // 실제 라우팅 연결 예: navigate(`/brand/${action}`);
+//     // 실제 라우팅 연결 시 예:
+//     // navigate(`/brand/${action}`);
 //   };
 
 //   const handleLogout = () => {
-//     alert("로그아웃(테스트)");
-//     navigate("/login");
+//     if (typeof onLogout === "function") onLogout();
+//     else navigate("/login");
 //   };
 
 //   return (
 //     <div className="main-page">
-//       {/* ✅ 로고-메뉴-계정 오른쪽 배치 */}
+//       {/* ✅ 개인정보/이용약관 모달 */}
+//       <PolicyModal
+//         open={openType === "privacy"}
+//         title="개인정보 처리방침"
+//         onClose={closeModal}
+//       >
+//         <PrivacyContent />
+//       </PolicyModal>
+
+//       <PolicyModal
+//         open={openType === "terms"}
+//         title="이용약관"
+//         onClose={closeModal}
+//       >
+//         <TermsContent />
+//       </PolicyModal>
+
+//       {/* ✅ 상단바 */}
 //       <header className="main-header">
 //         <div
 //           className="brand"
@@ -83,7 +113,7 @@
 //               type="button"
 //               className="nav-link nav-dropdown__btn"
 //               aria-expanded={brandOpen ? "true" : "false"}
-//               onClick={() => setBrandOpen((v) => !v)} // 모바일 클릭 대응
+//               onClick={() => setBrandOpen((v) => !v)}
 //             >
 //               브랜드 컨설팅 <span className="nav-dropdown__chev">▾</span>
 //             </button>
@@ -124,11 +154,7 @@
 //             </div>
 //           </div>
 
-//           <button
-//             type="button"
-//             className="nav-link"
-//             onClick={() => alert("홍보물 컨설팅 (테스트)")}
-//           >
+//           <button type="button" className="nav-link">
 //             홍보물 컨설팅
 //           </button>
 //         </nav>
@@ -141,11 +167,7 @@
 //           >
 //             홈
 //           </button>
-//           <button
-//             type="button"
-//             className="nav-link"
-//             onClick={() => alert("마이페이지 (테스트)")}
-//           >
+//           <button type="button" className="nav-link">
 //             마이페이지
 //           </button>
 //           <button type="button" className="nav-link" onClick={handleLogout}>
@@ -154,6 +176,7 @@
 //         </div>
 //       </header>
 
+//       {/* ✅ 본문 */}
 //       <main className="main-content">
 //         <h2 className="section-title">컨설팅 시작하기</h2>
 
@@ -180,16 +203,7 @@
 //             </div>
 //           </article>
 
-//           <article
-//             className="info-card"
-//             role="button"
-//             tabIndex={0}
-//             onClick={() => alert("브랜드 컨설팅 (테스트)")}
-//             onKeyDown={(event) => {
-//               if (event.key === "Enter" || event.key === " ")
-//                 alert("브랜드 컨설팅 (테스트)");
-//             }}
-//           >
+//           <article className="info-card">
 //             <div className="card-image alt">
 //               <img src={makeset} alt="브랜드 컨설팅" />
 //             </div>
@@ -202,16 +216,7 @@
 //             </div>
 //           </article>
 
-//           <article
-//             className="info-card"
-//             role="button"
-//             tabIndex={0}
-//             onClick={() => alert("홍보물 컨설팅 (테스트)")}
-//             onKeyDown={(event) => {
-//               if (event.key === "Enter" || event.key === " ")
-//                 alert("홍보물 컨설팅 (테스트)");
-//             }}
-//           >
+//           <article className="info-card">
 //             <div className="card-image third">
 //               <img src={story} alt="홍보물 컨설팅" />
 //             </div>
@@ -225,13 +230,14 @@
 //           </article>
 //         </div>
 
-//         {/* ✅ 투자유치 섹션(원본 그대로 포함) */}
+//         {/* ✅ 투자유치 섹션 */}
 //         <section className="deal-board" aria-label="투자 유치 게시판">
 //           <div className="deal-header">
 //             <div>
 //               <p className="deal-eyebrow">초기 스타트업과 함께 해주세요!</p>
 //               <h3 className="deal-title">스타트업 투자유치</h3>
 //             </div>
+
 //             <button
 //               type="button"
 //               className="deal-more"
@@ -257,10 +263,7 @@
 //               </div>
 //               <div className="deal-footer">
 //                 <strong>[series A] 92억+ TIPS 투자유치</strong>
-//                 <button
-//                   type="button"
-//                   onClick={() => alert("투자성과 뉴스 (테스트)")}
-//                 >
+//                 <button type="button" onClick={() => alert("뉴스 (테스트)")}>
 //                   투자성과 뉴스
 //                 </button>
 //               </div>
@@ -281,10 +284,7 @@
 //               </div>
 //               <div className="deal-footer">
 //                 <strong>[series C 이상] 409억 투자유치</strong>
-//                 <button
-//                   type="button"
-//                   onClick={() => alert("투자성과 뉴스 (테스트)")}
-//                 >
+//                 <button type="button" onClick={() => alert("뉴스 (테스트)")}>
 //                   투자성과 뉴스
 //                 </button>
 //               </div>
@@ -305,10 +305,7 @@
 //               </div>
 //               <div className="deal-footer">
 //                 <strong>[pre-IPO] 170억 투자완료</strong>
-//                 <button
-//                   type="button"
-//                   onClick={() => alert("투자성과 뉴스 (테스트)")}
-//                 >
+//                 <button type="button" onClick={() => alert("뉴스 (테스트)")}>
 //                   투자성과 뉴스
 //                 </button>
 //               </div>
@@ -329,10 +326,7 @@
 //               </div>
 //               <div className="deal-footer">
 //                 <strong>[seed] 18억 투자완료</strong>
-//                 <button
-//                   type="button"
-//                   onClick={() => alert("투자성과 뉴스 (테스트)")}
-//                 >
+//                 <button type="button" onClick={() => alert("뉴스 (테스트)")}>
 //                   투자성과 뉴스
 //                 </button>
 //               </div>
@@ -353,10 +347,7 @@
 //               </div>
 //               <div className="deal-footer">
 //                 <strong>[series A] 65억 투자유치</strong>
-//                 <button
-//                   type="button"
-//                   onClick={() => alert("투자성과 뉴스 (테스트)")}
-//                 >
+//                 <button type="button" onClick={() => alert("뉴스 (테스트)")}>
 //                   투자성과 뉴스
 //                 </button>
 //               </div>
@@ -377,10 +368,7 @@
 //               </div>
 //               <div className="deal-footer">
 //                 <strong>[series B] 210억 투자완료</strong>
-//                 <button
-//                   type="button"
-//                   onClick={() => alert("투자성과 뉴스 (테스트)")}
-//                 >
+//                 <button type="button" onClick={() => alert("뉴스 (테스트)")}>
 //                   투자성과 뉴스
 //                 </button>
 //               </div>
@@ -389,56 +377,35 @@
 //         </section>
 //       </main>
 
-//       <footer className="main-footer">
-//         <div className="footer-inner">
-//           <div className="footer-links">
-//             <button type="button" className="footer-link">
-//               개인정보 처리방침
-//             </button>
-//             <span className="footer-sep">|</span>
-//             <button type="button" className="footer-link">
-//               이용약관
-//             </button>
-//           </div>
-//           <div className="footer-text">
-//             BRANDPILOT | 대전광역시 서구 문정로48번길 30 (탄방동, KT타워)
-//           </div>
-//           <div className="footer-text">KT AIVLE 7반 15조 </div>
-//           <div className="footer-text hero-footer-copy">
-//             © 2026 Team15 Corp. All rights reserved.
-//           </div>
-//         </div>
-//       </footer>
+//       {/* ✅ footer 교체 */}
+//       <SiteFooter />
 //     </div>
 //   );
 // }
 
 // src/pages/MainPage.jsx
 import React, { useEffect, useRef, useState } from "react";
-import "../styles/MainPage.css";
-
-import analyzeCompany from "../main_image/companyanalyze.png";
-import makeset from "../main_image/Brandingconsult.png";
-import story from "../main_image/PromotionalConsulting.png";
-
 import { useNavigate } from "react-router-dom";
 
-// ✅ 모달/콘텐츠(이미 만들어둔 파일 재사용)
+import analyzeCompany from "../Image/main_image/companyanalyze.png";
+import makeset from "../Image/main_image/Brandingconsult.png";
+import story from "../Image/main_image/PromotionalConsulting.png";
+
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
-
-// ✅ footer를 공통 컴포넌트로 통일
 import SiteFooter from "../components/SiteFooter.jsx";
 
 export default function MainPage({ onLogout }) {
   const navigate = useNavigate();
-  const handleDiagnosisClick = () => navigate("/diagnosis");
 
-  // ✅ 브랜드 컨설팅 드롭다운 (모바일 클릭용 상태 + 바깥 클릭 닫기)
+  const handleDiagnosisClick = () => navigate("/diagnosis");
+  const handleBrandPage = () => navigate("/brandconsulting");
+
+  // ✅ 브랜드 컨설팅 드롭다운
   const [brandOpen, setBrandOpen] = useState(false);
   const brandRef = useRef(null);
 
-  // ✅ 약관/방침 모달 상태: "privacy" | "terms" | null
+  // ✅ 약관/방침 모달
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
@@ -460,17 +427,10 @@ export default function MainPage({ onLogout }) {
     };
   }, [brandOpen]);
 
+  // ✅ 드롭다운 클릭 시 브랜드 컨설팅 페이지로 이동 (원하면 섹션 정보도 전달)
   const handleBrandItem = (action) => {
     setBrandOpen(false);
-    const map = {
-      concept: "컨셉 컨설팅",
-      naming: "네이밍 컨설팅",
-      logo: "로고 컨설팅",
-      homepage: "홈페이지 컨설팅",
-    };
-    alert(`${map[action]} 클릭 (테스트)`);
-    // 실제 라우팅 연결 시 예:
-    // navigate(`/brand/${action}`);
+    navigate("/brandconsulting", { state: { section: action } });
   };
 
   const handleLogout = () => {
@@ -480,7 +440,6 @@ export default function MainPage({ onLogout }) {
 
   return (
     <div className="main-page">
-      {/* ✅ 개인정보/이용약관 모달 */}
       <PolicyModal
         open={openType === "privacy"}
         title="개인정보 처리방침"
@@ -497,7 +456,6 @@ export default function MainPage({ onLogout }) {
         <TermsContent />
       </PolicyModal>
 
-      {/* ✅ 상단바 */}
       <header className="main-header">
         <div
           className="brand"
@@ -520,7 +478,6 @@ export default function MainPage({ onLogout }) {
             기업 진단 &amp; 인터뷰
           </button>
 
-          {/* ✅ 브랜드 컨설팅 드롭다운 */}
           <div
             className={`nav-dropdown ${brandOpen ? "is-open" : ""}`}
             ref={brandRef}
@@ -570,7 +527,11 @@ export default function MainPage({ onLogout }) {
             </div>
           </div>
 
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => alert("홍보물 컨설팅 (준비중)")}
+          >
             홍보물 컨설팅
           </button>
         </nav>
@@ -583,7 +544,11 @@ export default function MainPage({ onLogout }) {
           >
             홈
           </button>
-          <button type="button" className="nav-link">
+          <button
+            type="button"
+            className="nav-link"
+            onClick={() => alert("마이페이지 (준비중)")}
+          >
             마이페이지
           </button>
           <button type="button" className="nav-link" onClick={handleLogout}>
@@ -592,7 +557,6 @@ export default function MainPage({ onLogout }) {
         </div>
       </header>
 
-      {/* ✅ 본문 */}
       <main className="main-content">
         <h2 className="section-title">컨설팅 시작하기</h2>
 
@@ -602,9 +566,8 @@ export default function MainPage({ onLogout }) {
             role="button"
             tabIndex={0}
             onClick={handleDiagnosisClick}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ")
-                handleDiagnosisClick();
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") handleDiagnosisClick();
             }}
           >
             <div className="card-image">
@@ -619,7 +582,16 @@ export default function MainPage({ onLogout }) {
             </div>
           </article>
 
-          <article className="info-card">
+          {/* ✅ 여기 클릭하면 BrandConsulting으로 이동 */}
+          <article
+            className="info-card"
+            role="button"
+            tabIndex={0}
+            onClick={handleBrandPage}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") handleBrandPage();
+            }}
+          >
             <div className="card-image alt">
               <img src={makeset} alt="브랜드 컨설팅" />
             </div>
@@ -632,7 +604,12 @@ export default function MainPage({ onLogout }) {
             </div>
           </article>
 
-          <article className="info-card">
+          <article
+            className="info-card"
+            role="button"
+            tabIndex={0}
+            onClick={() => alert("홍보물 컨설팅 (준비중)")}
+          >
             <div className="card-image third">
               <img src={story} alt="홍보물 컨설팅" />
             </div>
@@ -646,7 +623,8 @@ export default function MainPage({ onLogout }) {
           </article>
         </div>
 
-        {/* ✅ 투자유치 섹션 */}
+        {/* 투자유치 섹션은 네 기존 코드 그대로 유지하면 됨 */}
+        {/* ... */}
         <section className="deal-board" aria-label="투자 유치 게시판">
           <div className="deal-header">
             <div>
@@ -793,7 +771,6 @@ export default function MainPage({ onLogout }) {
         </section>
       </main>
 
-      {/* ✅ footer 교체 */}
       <SiteFooter />
     </div>
   );

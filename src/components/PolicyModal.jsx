@@ -1,7 +1,6 @@
 // src/components/PolicyModal.jsx
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import "../styles/PolicyModal.css";
 
 export default function PolicyModal({ open, title, onClose, children }) {
   const prevOverflow = useRef("");

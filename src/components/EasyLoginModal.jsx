@@ -1,6 +1,5 @@
 // src/components/EasyLoginModal.jsx
 import { useEffect, useState } from "react";
-import "../styles/EasyLoginModal.css";
 
 /**
  * 간편로그인 모달(UI)

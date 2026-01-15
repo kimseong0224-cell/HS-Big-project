@@ -1,22 +1,16 @@
 // src/pages/Login.jsx
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import namingLogoImg from "../login_image/네이밍_로고_추천.png";
-import analyzeCompany from "../login_image/기업 초기 진단.png";
-import analyzeReport from "../login_image/진단분석리포트.png";
-import makeset from "../login_image/문서초안생성.png";
-import story from "../login_image/스토리텔링.png";
+import namingLogoImg from "../Image/login_image/네이밍_로고_추천.png";
+import analyzeCompany from "../Image/login_image/기업 초기 진단.png";
+import analyzeReport from "../Image/login_image/진단분석리포트.png";
+import makeset from "../Image/login_image/문서초안생성.png";
+import story from "../Image/login_image/스토리텔링.png";
 
-import "../styles/Login.css";
-
-// ✅ 모달/콘텐츠(이미 만들어둔 파일 그대로 사용)
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
-
-// ✅ (추가) 간편로그인 모달
-import EasyLoginModal from "../components/EasyLoginModal.jsx"; // 너가 만들었던 파일명에 맞춰 수정 가능
+import EasyLoginModal from "../components/EasyLoginModal.jsx";
 
 export default function LoginApp() {
   const navigate = useNavigate();
@@ -25,11 +19,12 @@ export default function LoginApp() {
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  // ✅ (추가) 간편로그인 모달 상태
+  // ✅ 간편로그인 모달
   const [easyOpen, setEasyOpen] = useState(false);
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    // TODO: 실제 로그인 성공 시에만 이동
     navigate("/main");
   };
 
@@ -52,7 +47,7 @@ export default function LoginApp() {
         <TermsContent />
       </PolicyModal>
 
-      {/* ✅ (추가) 간편로그인 모달 */}
+      {/* ✅ 간편로그인 모달 */}
       <EasyLoginModal open={easyOpen} onClose={() => setEasyOpen(false)} />
 
       <div className="login-shell split">
@@ -195,7 +190,7 @@ export default function LoginApp() {
               로그인
             </button>
 
-            {/* ✅ 여기! 클릭 시 easyOpen true */}
+            {/* ✅ 간편로그인: 모달 띄우기 */}
             <button
               type="button"
               className="login-easy"
@@ -203,6 +198,11 @@ export default function LoginApp() {
             >
               간편로그인
             </button>
+
+            {/* (원하면 모달 말고 페이지로) */}
+            {/* <button type="button" className="login-easy" onClick={() => navigate("/easylogin")}>
+              간편로그인
+            </button> */}
 
             <div className="login-divider" />
 
