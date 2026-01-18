@@ -832,8 +832,12 @@ export default function DiagnosisInterview({ onLogout }) {
       alert("필수 항목을 모두 입력하면 AI 분석 요청이 가능합니다.");
       return;
     }
-    alert("AI 분석 요청 (테스트) → 결과 페이지로 이동");
-    // navigate("/diagnosis/result");
+
+    // (선택) 홈 진행률용 데이터도 같이 저장해두면 DiagnosisHome에 표시 가능
+    const payload = { progress, stage: 4, updatedAt: Date.now() };
+    localStorage.setItem("diagnosisDraft", JSON.stringify(payload));
+
+    navigate("/diagnosis/result");
   };
 
   return (

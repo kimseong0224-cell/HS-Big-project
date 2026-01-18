@@ -84,6 +84,18 @@ import LogoConsultingInterview from "./pages/LogoConsultingInterview.jsx";
 import HomepageConsultingInterview from "./pages/HomepageConsultingInterview.jsx";
 
 import PromotionPage from "./pages/Promotion.jsx";
+import MyPage from "./pages/MyPage.jsx";
+import DigitalImageConsultingInterview from "./pages/DigitalImageConsultingInterview.jsx";
+import OfflineImageConsultingInterview from "./pages/OfflineImageConsultingInterview.jsx";
+
+import PromoVideoConsultingInterview from "./pages/PromoVideoConsultingInterview.jsx";
+
+import DiagnosisResult from "./pages/DiagnosisResult.jsx";
+import PromotionResult from "./pages/PromotionResult.jsx";
+
+import BrandConsultingResult from "./pages/BrandConsultingResult.jsx";
+
+import InvestmentBoard from "./pages/InvestmentBoard.jsx";
 
 export default function App() {
   return (
@@ -133,6 +145,28 @@ export default function App() {
 
       {/* ✅ 홍보물 컨설팅 */}
       <Route path="/promotion" element={<PromotionPage />} />
+
+      <Route path="/mypage" element={<MyPage />} />
+
+      <Route
+        path="/promotion/digital/interview"
+        element={<DigitalImageConsultingInterview />}
+      />
+      <Route
+        path="/promotion/offline/interview"
+        element={<OfflineImageConsultingInterview />}
+      />
+      <Route
+        path="/promotion/video/interview"
+        element={<PromoVideoConsultingInterview />}
+      />
+
+      <Route path="/diagnosis/result" element={<DiagnosisResult />} />
+      <Route path="/promotion/result" element={<PromotionResult />} />
+
+      <Route path="/brand/result" element={<BrandConsultingResult />} />
+
+      <Route path="/investment" element={<InvestmentBoard />} />
 
       {/* ✅ 없는 경로는 메인으로 */}
       <Route path="*" element={<Navigate to="/main" replace />} />

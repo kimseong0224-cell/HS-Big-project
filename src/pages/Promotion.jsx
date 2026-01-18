@@ -1,6 +1,6 @@
 // src/pages/Promotion.jsx
 import React, { useMemo, useState } from "react";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import bannerImage from "../Image/banner_image/Banner.png";
 import digitalImage from "../Image/promotion_image/Digital image.png";
@@ -14,6 +14,7 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
 export default function PromotionPage({ onLogout }) {
+  const navigate = useNavigate(); // ✅ 이게 없어서 이동이 안 됐음
   const location = useLocation();
   const [searchParams] = useSearchParams();
 
@@ -28,19 +29,19 @@ export default function PromotionPage({ onLogout }) {
     return location.state?.service || null;
   }, [searchParams, location.state]);
 
-  const handleDigital = () => alert("디지털 컨설팅(준비중)");
-  const handleOffline = () => alert("오프라인 컨설팅(준비중)");
-  const handleVideo = () => alert("홍보 영상 컨설팅(준비중)");
+  // ✅ 카드 클릭 이동
+  const handleDigital = () => navigate("/promotion/digital/interview");
+  const handleOffline = () => navigate("/promotion/offline/interview");
+  const handleVideo = () => navigate("/promotion/video/interview");
 
   const onPromoPick = (action) => {
-    // 필요하면 여기서 추가 동작 가능
+    // 필요하면 여기서 추가 동작 가능 (지금은 알럿만 유지)
     const map = {
       digital: "디지털 디자인",
       offline: "오프라인 디자인",
       video: "홍보 영상",
     };
-    // 너무 방해되면 alert 지워도 됨 (원 코드 느낌 유지하려고 남김)
-    alert(`${map[action]} 이동(테스트)`);
+    // alert(`${map[action]} 이동(테스트)`);
   };
 
   return (
@@ -65,7 +66,7 @@ export default function PromotionPage({ onLogout }) {
       {/* ✅ 공통 헤더 */}
       <SiteHeader onLogout={onLogout} onPromoPick={onPromoPick} />
 
-      {/* ✅ Hero (팀원 디자인 그대로 유지) */}
+      {/* ✅ Hero */}
       <section className="promo-hero">
         <div className="promo-hero-inner">
           <div className="promo-banner" aria-label="홍보물컨설팅 소개">
@@ -94,6 +95,7 @@ export default function PromotionPage({ onLogout }) {
                 </div>
               </div>
 
+              {/* 필요하면 사용 */}
               {/* {pickedService ? (
                 <div style={{ marginTop: 14, fontSize: 14, opacity: 0.9 }}>
                   선택된 메뉴: <b>{pickedService}</b>
@@ -104,7 +106,7 @@ export default function PromotionPage({ onLogout }) {
         </div>
       </section>
 
-      {/* ✅ Content (팀원 디자인 그대로 유지) */}
+      {/* ✅ Content */}
       <main className="promo-content">
         <section className="promo-intro">
           <h2 className="section-title">컨설팅 시작하기</h2>
@@ -112,7 +114,15 @@ export default function PromotionPage({ onLogout }) {
 
         <section className="promo-grid">
           <div className="promo-cards">
-            <article className="promo-card" onClick={handleDigital}>
+            <article
+              className="promo-card"
+              role="button"
+              tabIndex={0}
+              onClick={handleDigital}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleDigital();
+              }}
+            >
               <div className="promo-card-image">
                 <img src={digitalImage} alt="디지털 디자인" />
               </div>
@@ -124,7 +134,15 @@ export default function PromotionPage({ onLogout }) {
               </div>
             </article>
 
-            <article className="promo-card" onClick={handleOffline}>
+            <article
+              className="promo-card"
+              role="button"
+              tabIndex={0}
+              onClick={handleOffline}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleOffline();
+              }}
+            >
               <div className="promo-card-image">
                 <img src={offlineImage} alt="오프라인 디자인" />
               </div>
@@ -136,7 +154,15 @@ export default function PromotionPage({ onLogout }) {
               </div>
             </article>
 
-            <article className="promo-card" onClick={handleVideo}>
+            <article
+              className="promo-card"
+              role="button"
+              tabIndex={0}
+              onClick={handleVideo}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") handleVideo();
+              }}
+            >
               <div className="promo-card-image">
                 <img src={promoVideoImage} alt="홍보 영상" />
               </div>

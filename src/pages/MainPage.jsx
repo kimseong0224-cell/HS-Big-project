@@ -127,7 +127,7 @@ export default function MainPage({ onLogout }) {
             <button
               type="button"
               className="deal-more"
-              onClick={() => alert("전체보기 (테스트)")}
+              onClick={() => navigate("/investment")}
             >
               전체보기 &gt;
             </button>

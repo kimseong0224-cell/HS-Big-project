@@ -195,13 +195,22 @@ export default function LogoConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
-    if (!canAnalyze) {
-      alert("필수 항목을 모두 입력하면 AI 분석 요청이 가능합니다.");
-      return;
-    }
-    alert("로고 컨설팅 AI 분석 요청 (테스트)");
-    // 예: navigate("/brand/logo/result");
+    const payload = {
+      form, // 지금 페이지에서 관리 중인 입력값 객체
+      updatedAt: Date.now(),
+    };
+    localStorage.setItem("brandInterview_logo_v1", JSON.stringify(payload));
+    navigate("/brand/result?service=logo");
   };
+
+  // const handleAnalyze = () => {
+  //   if (!canAnalyze) {
+  //     alert("필수 항목을 모두 입력하면 AI 분석 요청이 가능합니다.");
+  //     return;
+  //   }
+  //   alert("로고 컨설팅 AI 분석 요청 (테스트)");
+  //   // 예: navigate("/brand/logo/result");
+  // };
 
   return (
     <div className="diagInterview">

@@ -191,13 +191,19 @@ export default function NamingConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
-    if (!canAnalyze) {
-      alert("필수 항목을 모두 입력하면 AI 분석 요청이 가능합니다.");
-      return;
-    }
-    alert("네이밍 컨설팅 AI 분석 요청 (테스트)");
-    // 예: navigate("/brand/naming/result");
+    const payload = { form, updatedAt: Date.now() };
+    localStorage.setItem("brandInterview_naming_v1", JSON.stringify(payload));
+    navigate("/brand/result?service=naming");
   };
+
+  // const handleAnalyze = () => {
+  //   if (!canAnalyze) {
+  //     alert("필수 항목을 모두 입력하면 AI 분석 요청이 가능합니다.");
+  //     return;
+  //   }
+  //   alert("네이밍 컨설팅 AI 분석 요청 (테스트)");
+  //   // 예: navigate("/brand/naming/result");
+  // };
 
   return (
     <div className="diagInterview">
