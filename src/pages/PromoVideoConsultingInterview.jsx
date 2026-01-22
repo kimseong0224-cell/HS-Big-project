@@ -59,7 +59,7 @@ export default function PromoVideoConsultingInterview({ onLogout }) {
       { id: "q4", label: "방해 요소", ref: refQ4 },
       { id: "extra", label: "추가 정보", ref: refExtra },
     ],
-    []
+    [],
   );
 
   const requiredKeys = useMemo(
@@ -70,7 +70,7 @@ export default function PromoVideoConsultingInterview({ onLogout }) {
       "brandAssets",
       "avoidElements",
     ],
-    []
+    [],
   );
 
   const requiredStatus = useMemo(() => {
@@ -83,7 +83,7 @@ export default function PromoVideoConsultingInterview({ onLogout }) {
 
   const completedRequired = useMemo(
     () => requiredKeys.filter((k) => requiredStatus[k]).length,
-    [requiredKeys, requiredStatus]
+    [requiredKeys, requiredStatus],
   );
 
   const progress = useMemo(() => {
@@ -168,6 +168,12 @@ export default function PromoVideoConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (홍보물-영상 - AI 분석 요청)
+    // - 현재: form을 localStorage에 저장 → /promotion/result?service=video 로 이동
+    // - 백엔드 명세서:
+    //   - 브랜드 홍보 영상 제작: POST /brands/videos
+    //   - 생성 결과 조회:       GET  /brands/videos
+    // - 결과가 동영상 URL로 오면(<video src=... controls />) 형태로 렌더 가능
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

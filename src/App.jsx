@@ -22,6 +22,8 @@
 // import PromotionResult from "./pages/PromotionResult.jsx";
 // import BrandConsultingResult from "./pages/BrandConsultingResult.jsx";
 // import InvestmentBoard from "./pages/InvestmentBoard.jsx";
+import InvestmentPostCreate from "./pages/InvestmentPostCreate.jsx";
+import InvestmentPostDetail from "./pages/InvestmentPostDetail.jsx";
 // import BrandStoryConsultingInterview from "./pages/BrandStoryConsultingInterview.jsx";
 
 // export default function App() {
@@ -140,6 +142,8 @@ import BrandStoryConsultingInterview from "./pages/BrandStoryConsultingInterview
 import BrandAllResults from "./pages/BrandAllResults.jsx";
 import PromotionAllResults from "./pages/PromotionAllResults.jsx";
 
+import AuthTest from "./pages/AuthTest";
+
 export default function App() {
   return (
     <Routes>
@@ -226,6 +230,10 @@ export default function App() {
 
       {/* ✅ 투자 라운지 */}
       <Route path="/investment" element={<InvestmentBoard />} />
+      <Route path="/investment/new" element={<InvestmentPostCreate />} />
+      <Route path="/investment/:id" element={<InvestmentPostDetail />} />
+
+      <Route path="/authtest" element={<AuthTest />} />
 
       {/* ✅ 없는 경로는 메인으로 */}
       <Route path="*" element={<Navigate to="/main" replace />} />

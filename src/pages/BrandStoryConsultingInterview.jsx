@@ -230,6 +230,13 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
 
   // ✅ 결과 페이지 연결
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (브랜드 스토리 - AI 분석 요청 버튼)
+    // - 현재 로직: form 값을 localStorage에 저장 → /brand/result?service=story 로 이동
+    // - 백엔드 연동 시(명세서 기준):
+    //   A) 인터뷰 저장(공통): POST /brands/interview
+    //   B) 스토리 생성:      POST /brands/story
+    //      → 이후 결과 조회: GET  /brands/story (param: story)
+    // - 실제 요청/응답 스키마(brandId 포함 여부 등)는 백엔드와 최종 합의 필요
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

@@ -9,6 +9,7 @@ export default function FindPassword() {
 
   const [step, setStep] = useState("request");
 
+  // ✅ userId는 이제 "아이디"
   const [userId, setUserId] = useState("");
   const [phone, setPhone] = useState("");
 
@@ -28,9 +29,10 @@ export default function FindPassword() {
     return "비밀번호 찾기";
   }, [step]);
 
-  const isEmailLike = useMemo(() => {
+  // ✅ VALIDATION: id 규칙(프론트-only)
+  const isIdLike = useMemo(() => {
     const v = userId.trim();
-    return v.includes("@") && v.includes(".");
+    return /^[a-zA-Z0-9_]{4,20}$/.test(v);
   }, [userId]);
 
   const isPhoneLike = useMemo(() => {
@@ -38,7 +40,6 @@ export default function FindPassword() {
     return onlyNum.length >= 10 && onlyNum.length <= 11;
   }, [phone]);
 
-  // ✅ 실시간 비밀번호 규칙 체크 (Signup과 동일하게: 8자 + 대문자 + 숫자 + 특수문자)
   const pwRules = useMemo(() => {
     const v = newPw;
     return {
@@ -54,7 +55,7 @@ export default function FindPassword() {
 
   const pwMatch = useMemo(
     () => newPw && newPw2 && newPw === newPw2,
-    [newPw, newPw2]
+    [newPw, newPw2],
   );
 
   const resetAlerts = () => {
@@ -62,13 +63,15 @@ export default function FindPassword() {
     setError("");
   };
 
-  // (1) 인증코드 발송
+  // (1) 인증코드 발송 (프론트-only)
   const handleRequest = async (e) => {
     e.preventDefault();
     resetAlerts();
 
-    if (!userId.trim()) return setError("아이디(이메일)를 입력해주세요.");
-    if (!isEmailLike) return setError("아이디는 이메일 형식으로 입력해주세요.");
+    if (!userId.trim()) return setError("아이디를 입력해주세요.");
+    if (!isIdLike)
+      return setError("아이디는 4~20자, 영문/숫자/_ 형태로 입력해주세요.");
+
     if (!phone.trim()) return setError("휴대폰 번호를 입력해주세요.");
     if (!isPhoneLike)
       return setError("휴대폰 번호는 숫자만 10~11자리로 입력해주세요.");
@@ -86,7 +89,7 @@ export default function FindPassword() {
     }
   };
 
-  // (2) 인증코드 확인
+  // (2) 인증코드 확인 (프론트-only)
   const handleVerify = async (e) => {
     e.preventDefault();
     resetAlerts();
@@ -104,14 +107,14 @@ export default function FindPassword() {
     }
   };
 
-  // (3) 새 비밀번호 재설정
+  // (3) 새 비밀번호 재설정 (프론트-only)
   const handleReset = async (e) => {
     e.preventDefault();
     resetAlerts();
 
     if (!pwValid) {
       return setError(
-        "비밀번호는 8자 이상이며 대문자/숫자/특수문자를 포함해야 합니다."
+        "비밀번호는 8자 이상이며 대문자/숫자/특수문자를 포함해야 합니다.",
       );
     }
     if (!pwMatch) return setError("비밀번호 확인이 일치하지 않습니다.");
@@ -185,20 +188,21 @@ export default function FindPassword() {
         {message ? <p className="notice">{message}</p> : null}
         {error ? <p className="error">{error}</p> : null}
 
+        {/* STEP 1 */}
         {step === "request" && (
           <form className="findpw-form" onSubmit={handleRequest}>
             <div className="field">
-              <label htmlFor="findpw-id">아이디 (E-mail)</label>
+              <label htmlFor="findpw-id">아이디</label>
               <input
                 id="findpw-id"
-                type="email"
-                placeholder="이메일 아이디 입력"
+                type="text"
+                placeholder="아이디 입력"
                 value={userId}
                 onChange={(e) => setUserId(e.target.value)}
-                autoComplete="email"
+                autoComplete="username"
               />
               <small className="helper">
-                회원가입한 이메일 주소를 입력해주세요.
+                4~20자, 영문/숫자/_ 형태의 아이디를 입력해주세요.
               </small>
             </div>
 
@@ -230,6 +234,7 @@ export default function FindPassword() {
           </form>
         )}
 
+        {/* STEP 2 */}
         {step === "verify" && (
           <form className="findpw-form" onSubmit={handleVerify}>
             <div className="field">
@@ -272,6 +277,7 @@ export default function FindPassword() {
           </form>
         )}
 
+        {/* STEP 3 */}
         {step === "reset" && (
           <form className="findpw-form" onSubmit={handleReset}>
             <div className="field">
@@ -288,7 +294,6 @@ export default function FindPassword() {
                 8자 이상 · 대문자/숫자/특수문자 포함
               </small>
 
-              {/* ✅ 여기! 실시간 규칙 표시 */}
               <div className="checkline">
                 <span className={`pill ${pwRules.lenOk ? "ok" : ""}`}>
                   8자+
@@ -337,6 +342,7 @@ export default function FindPassword() {
           </form>
         )}
 
+        {/* DONE */}
         {step === "done" && (
           <div className="done">
             <p className="done-title">완료!</p>

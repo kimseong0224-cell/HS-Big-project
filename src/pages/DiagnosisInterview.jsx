@@ -8,10 +8,48 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+/**
+ * [DiagnosisInterview] 초기 진단 인터뷰(Foundation) 페이지
+ * ------------------------------------------------------------
+ * ✅ 화면 목적
+ * - 기업의 핵심 정보를 폼으로 수집(7개 필수 항목)
+ * - 진행률(progress)/현재 단계(currentSectionLabel) 표시
+ * - 자동 저장(디바운스), 임시 저장(버튼) 제공
+ * - 필수 입력 완료 시 "AI 분석 요청" 활성화 → 결과 페이지 이동
+ *
+ * ✅ 현재 프론트 구현 상태
+ * - localStorage에 draft 저장(STORAGE_KEY)
+ * - Home에 표시용 요약 저장(HOME_SUMMARY_KEY)
+ * - resume 모드로 들어오면 첫 미완료 섹션으로 자동 스크롤
+ *
+ * ✅ BACKEND 연동 포인트(핵심)
+ * 1) Draft 저장/로드
+ *   - 지금: localStorage
+ *   - 백 연동 후: 서버 DB에 사용자별 draft 저장
+ *   - 권장 API:
+ *     - GET  /diagnosis/draft
+ *     - POST /diagnosis/draft   (또는 PUT)
+ *     - DELETE /diagnosis/draft
+ *
+ * 2) AI 분석 요청(가장 중요)
+ *   - 지금: navigate("/diagnosis/result")
+ *   - 백 연동 후:
+ *     - POST /diagnosis/analyze (또는 /diagnosis/report)
+ *       request: form 전체 + (옵션: userId, draftId)
+ *       response: { requestId or reportId }
+ *     - 이후 결과 페이지에서 GET /diagnosis/result/:id 로 조회
+ *
+ * 3) 보안/인증
+ *   - 이 페이지는 로그인 사용자 전제(저장/조회가 사용자별)
+ *   - API 호출 시 Authorization 헤더 필요(토큰)
+ */
+
+// 로컬 저장 키(홈/Interview 간 동일하게 유지해야 함)
 const STORAGE_KEY = "diagnosisInterviewDraft_v1";
 const HOME_SUMMARY_KEY = "diagnosisDraft";
 
-// ✅ 선택지(너가 적은 기준 기반)
+// ✅ 선택지 데이터(프론트 표시용)
+// BACKEND: 보통 고정값이라 프론트 하드코딩 or 서버에서 코드 테이블 내려받기 둘 다 가능
 const INDUSTRY_OPTIONS = [
   { value: "saas", label: "SaaS/플랫폼" },
   { value: "manufacturing", label: "제조/하드웨어" },
@@ -46,38 +84,60 @@ export default function DiagnosisInterview({ onLogout }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ 약관/방침 모달
+  // =========================================================
+  // ✅ 약관/방침 모달 UI
+  // =========================================================
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
+  // =========================================================
   // ✅ 폼 상태 (초기 진단 7문항 중심)
+  // ---------------------------------------------------------
+  // BACKEND:
+  // - 서버 저장 시 그대로 payload로 쓰기 좋게 key를 명확히 유지하는게 좋음
+  // - 추후 결과 리포트 생성에도 그대로 입력 데이터로 활용 가능
+  // =========================================================
   const [form, setForm] = useState({
-    // 기본
+    // 기본(선택)
     companyName: "",
     website: "",
 
-    // Foundation (초기 진단)
-    oneLine: "", // 한 줄 정의
-    industry: "", // 산업 카테고리
-    stage: "", // 성장 단계
-    customerProblem: "", // 핵심 문제
-    targetPersona: "", // 타겟 고객 페르소나
-    usp: "", // 차별화 포인트
-    visionHeadline: "", // 5년 뒤 헤드라인(비전)
+    // Foundation (필수 7문항)
+    oneLine: "", // 한 줄 정의 *
+    industry: "", // 산업 카테고리 *
+    stage: "", // 성장 단계 *
+    customerProblem: "", // 핵심 문제 *
+    targetPersona: "", // 타겟 고객 페르소나 *
+    usp: "", // 차별화 포인트 *
+    visionHeadline: "", // 5년 뒤 헤드라인(비전) *
   });
 
+  // =========================================================
   // ✅ 저장 상태 UI
+  // - saveMsg: "자동 저장됨/임시 저장 완료" 같은 UX 텍스트
+  // - lastSaved: 사용자에게 마지막 저장 시각 노출
+  // - loaded: 최초 로딩 완료 여부(로컬 draft 로드 전 자동저장 방지)
+  //
+  // BACKEND:
+  // - 서버 호출이면 isLoading / isSaving 같은 상태도 분리하면 더 좋음
+  // =========================================================
   const [saveMsg, setSaveMsg] = useState("");
   const [lastSaved, setLastSaved] = useState("-");
   const [loaded, setLoaded] = useState(false);
 
-  // 섹션 스크롤용 ref
+  // =========================================================
+  // ✅ 섹션 스크롤용 ref
+  // - 오른쪽 "빠른 이동" 버튼에서 사용
+  // - resume 모드에서 첫 미완료 섹션으로 자동 이동에도 사용
+  // =========================================================
   const refBasic = useRef(null);
   const refFoundation = useRef(null);
   const refCustomer = useRef(null);
   const refDiff = useRef(null);
   const refVision = useRef(null);
 
+  // 오른쪽 "빠른 이동" 버튼 렌더링용 섹션 목록
+  // useMemo로 고정해 리렌더 비용 줄임
   const sections = useMemo(
     () => [
       { id: "basic", label: "기본 정보", ref: refBasic },
@@ -89,7 +149,11 @@ export default function DiagnosisInterview({ onLogout }) {
     [],
   );
 
+  // =========================================================
   // ✅ 필수 항목(초기 진단 7개)
+  // - progress 계산 기준
+  // - canAnalyze(분석 버튼 활성화) 기준
+  // =========================================================
   const requiredKeys = useMemo(
     () => [
       "oneLine",
@@ -103,6 +167,7 @@ export default function DiagnosisInterview({ onLogout }) {
     [],
   );
 
+  // 필수 항목별 완료 여부(true/false)
   const requiredStatus = useMemo(() => {
     const status = {};
     requiredKeys.forEach((k) => {
@@ -111,19 +176,26 @@ export default function DiagnosisInterview({ onLogout }) {
     return status;
   }, [form, requiredKeys]);
 
+  // 완료 개수
   const completedRequired = useMemo(() => {
     return requiredKeys.filter((k) => requiredStatus[k]).length;
   }, [requiredKeys, requiredStatus]);
 
+  // 진행률(%)
   const progress = useMemo(() => {
     if (requiredKeys.length === 0) return 0;
     return Math.round((completedRequired / requiredKeys.length) * 100);
   }, [completedRequired, requiredKeys.length]);
 
+  // 필수 모두 완료 → 분석 가능
   const canAnalyze = completedRequired === requiredKeys.length;
 
-  // ✅ 현재 단계
+  // =========================================================
+  // ✅ 현재 단계 텍스트(오른쪽 UI에 표시)
+  // - 사용자에게 “지금 어디까지 했는지” 가독성 제공
+  // =========================================================
   const currentSectionLabel = useMemo(() => {
+    // 이 로직은 "필수 항목 채움 정도"에 따라 단계 추정
     if (!form.oneLine.trim() || !form.industry.trim() || !form.stage.trim())
       return "비즈니스 정의";
     if (!form.customerProblem.trim() || !form.targetPersona.trim())
@@ -133,11 +205,13 @@ export default function DiagnosisInterview({ onLogout }) {
     return "완료";
   }, [form]);
 
+  // 특정 섹션으로 스크롤
   const scrollToSection = (ref) => {
     if (!ref?.current) return;
     ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  // 첫 미완료 섹션 찾기(“이어서 진행하기” 시 이동)
   const getFirstIncompleteRef = () => {
     if (!form.oneLine.trim() || !form.industry.trim() || !form.stage.trim())
       return refFoundation;
@@ -148,7 +222,14 @@ export default function DiagnosisInterview({ onLogout }) {
     return refVision;
   };
 
-  // ✅ Home에 표시할 요약 저장
+  /**
+   * [saveHomeSummary]
+   * - DiagnosisHome에서 진행률/단계/저장시간을 보여주기 위한 "요약" 저장
+   *
+   * BACKEND:
+   * - 서버 저장 구조라면 Home은 서버에서 요약을 가져오면 되고,
+   * - 이 localStorage 요약 저장은 없어져도 됨(혹은 캐시로만 유지)
+   */
   const saveHomeSummary = (updatedAtTs) => {
     try {
       const summary = {
@@ -164,7 +245,16 @@ export default function DiagnosisInterview({ onLogout }) {
     }
   };
 
+  // =========================================================
   // ✅ draft 로드
+  // ---------------------------------------------------------
+  // 현재: localStorage에서 draft를 읽어 form에 merge
+  //
+  // BACKEND:
+  // - 이 useEffect에서 GET /diagnosis/draft 호출로 교체 가능
+  // - 응답으로 form을 받아 setForm에 채움
+  // - lastSaved는 서버 updatedAt(ISO string or timestamp) 기반으로 표시
+  // =========================================================
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -173,7 +263,11 @@ export default function DiagnosisInterview({ onLogout }) {
         return;
       }
       const parsed = JSON.parse(raw);
+
+      // 기존 초기값 + 저장된 form을 merge (누락 필드 대비)
       if (parsed?.form) setForm((prev) => ({ ...prev, ...parsed.form }));
+
+      // 마지막 저장 시간 표시
       if (parsed?.updatedAt) {
         const d = new Date(parsed.updatedAt);
         if (!Number.isNaN(d.getTime())) setLastSaved(d.toLocaleString());
@@ -185,12 +279,20 @@ export default function DiagnosisInterview({ onLogout }) {
     }
   }, []);
 
-  // ✅ “이어서 진행하기”로 들어오면 첫 미완료 섹션으로 이동
+  // =========================================================
+  // ✅ resume 모드로 들어오면 첫 미완료 섹션으로 이동
+  // - DiagnosisHome에서 navigate 시 state: { mode: "resume" }
+  //
+  // BACKEND:
+  // - 서버 draft 로드가 비동기라면 loaded 타이밍을 서버 로딩 완료에 맞춰야 함
+  // =========================================================
   useEffect(() => {
     if (!loaded) return;
+
     const mode = location.state?.mode;
     if (mode !== "resume") return;
 
+    // DOM 렌더링 안정화 후 스크롤
     const t = setTimeout(() => {
       scrollToSection(getFirstIncompleteRef());
     }, 60);
@@ -199,7 +301,23 @@ export default function DiagnosisInterview({ onLogout }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
+  // =========================================================
   // ✅ 자동 저장(디바운스)
+  // ---------------------------------------------------------
+  // - form이 바뀔 때마다 600ms 뒤 localStorage 저장
+  // - 저장 성공 시 lastSaved 갱신 + "자동 저장됨" 표시
+  //
+  // BACKEND:
+  // - 여기서 서버에 너무 자주 저장하면 부하/비용이 커질 수 있음
+  // - 실무에서는 보통:
+  //   1) 디바운스 시간을 더 늘리거나(예: 1.5~3초)
+  //   2) blur 시 저장 / 섹션 이동 시 저장 / 임시저장 버튼으로 저장
+  //   3) 로컬 캐시 + 특정 타이밍에만 서버 동기화
+  //
+  // TODO(BACKEND) 권장 구조:
+  // - autoSave는 localStorage에만 하고,
+  // - 서버 저장은 "임시저장" 버튼 or "AI 분석 요청" 직전에 한 번 업로드
+  // =========================================================
   useEffect(() => {
     if (!loaded) return;
     setSaveMsg("");
@@ -226,10 +344,20 @@ export default function DiagnosisInterview({ onLogout }) {
     currentSectionLabel,
   ]);
 
+  // form 값 업데이트 유틸(키 기반)
   const setValue = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  /**
+   * [handleTempSave] 임시 저장 버튼
+   * - 현재: localStorage에 즉시 저장 + 요약 저장
+   *
+   * BACKEND:
+   * - 여기서 서버 draft 저장 API 호출로 교체하는 게 가장 자연스럽다.
+   *   예: POST /diagnosis/draft { form }
+   * - 성공 시 saveMsg/lastSaved 업데이트
+   */
   const handleTempSave = () => {
     try {
       const payload = { form, updatedAt: Date.now() };
@@ -237,11 +365,20 @@ export default function DiagnosisInterview({ onLogout }) {
       setLastSaved(new Date(payload.updatedAt).toLocaleString());
       setSaveMsg("임시 저장 완료");
       saveHomeSummary(payload.updatedAt);
+
+      // TODO(BACKEND):
+      // - await api.saveDraft(form)
+      // - 서버 updatedAt 기반으로 lastSaved 세팅
     } catch {
       setSaveMsg("저장 실패");
     }
   };
 
+  /**
+   * [handleNext] 다음 섹션으로 스크롤 이동
+   * - currentSectionLabel 값을 기준으로 다음 섹션 ref를 선택
+   * - UX 편의 기능(백 연동 없음)
+   */
   const handleNext = () => {
     const label = currentSectionLabel;
     const map = {
@@ -257,6 +394,20 @@ export default function DiagnosisInterview({ onLogout }) {
     scrollToSection(nextRef);
   };
 
+  /**
+   * [handleAnalyze] AI 분석 요청
+   * ------------------------------------------------------------
+   * 현재:
+   * - 필수 항목 완료 체크
+   * - HOME 요약 저장 후 /diagnosis/result로 이동
+   *
+   * BACKEND(권장 동작):
+   * 1) (선택) draft를 서버에 저장(최신 상태 보장)
+   * 2) POST /diagnosis/analyze 로 분석 요청 생성
+   *    - response: { reportId } 또는 { requestId }
+   * 3) navigate("/diagnosis/result", { state: { reportId } })
+   *    또는 /diagnosis/result/:reportId 로 이동
+   */
   const handleAnalyze = () => {
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 AI 분석 요청이 가능합니다.");
@@ -271,6 +422,15 @@ export default function DiagnosisInterview({ onLogout }) {
     };
     localStorage.setItem(HOME_SUMMARY_KEY, JSON.stringify(payload));
 
+    // TODO(BACKEND):
+    // - 여기에서 서버로 분석 요청 보내야 함
+    //   const res = await diagnosisApi.requestAnalyze({ ...form })
+    //   navigate(`/diagnosis/result/${res.reportId}`)
+    // - 결과가 비동기로 생성된다면:
+    //   1) 결과 페이지에서 폴링(GET)하거나
+    //   2) "분석 중" 상태를 표시하고 완료되면 결과 렌더링
+
+    // 현재는 결과 페이지로 단순 이동(테스트)
     navigate("/diagnosis/result");
   };
 
@@ -293,7 +453,7 @@ export default function DiagnosisInterview({ onLogout }) {
         <TermsContent />
       </PolicyModal>
 
-      {/* ✅ 공통 헤더 */}
+      {/* ✅ 공통 헤더 (로그아웃) */}
       <SiteHeader onLogout={onLogout} />
 
       <main className="diagInterview__main">
@@ -325,9 +485,11 @@ export default function DiagnosisInterview({ onLogout }) {
           </div>
 
           <div className="diagInterview__grid">
-            {/* ✅ 왼쪽: 폼 */}
+            {/* =====================================================
+                ✅ 왼쪽: 폼 영역
+               ===================================================== */}
             <section className="diagInterview__left">
-              {/* BASIC */}
+              {/* BASIC (선택) */}
               <div className="card" ref={refBasic}>
                 <div className="card__head">
                   <h2>0. 기본 정보 (선택)</h2>
@@ -355,7 +517,7 @@ export default function DiagnosisInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* FOUNDATION */}
+              {/* FOUNDATION (필수 일부 포함) */}
               <div className="card" ref={refFoundation}>
                 <div className="card__head">
                   <h2>1. 비즈니스 정의</h2>
@@ -521,7 +683,9 @@ export default function DiagnosisInterview({ onLogout }) {
               </div>
             </section>
 
-            {/* ✅ 오른쪽: 진행률/가이드 */}
+            {/* =====================================================
+                ✅ 오른쪽: 진행률/가이드 사이드바
+               ===================================================== */}
             <aside className="diagInterview__right">
               <div className="sideCard">
                 <div className="sideCard__titleRow">
@@ -606,7 +770,9 @@ export default function DiagnosisInterview({ onLogout }) {
 
                 <button
                   type="button"
-                  className={`btn primary sideAnalyze ${canAnalyze ? "" : "disabled"}`}
+                  className={`btn primary sideAnalyze ${
+                    canAnalyze ? "" : "disabled"
+                  }`}
                   onClick={handleAnalyze}
                   disabled={!canAnalyze}
                 >

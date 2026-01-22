@@ -55,6 +55,18 @@ export default function BrandAllResults({ onLogout }) {
   // ✅ 약관/방침 모달
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
+  // 🔌 BACKEND 연동 포인트 (마이페이지용: 브랜드 컨설팅 전체 결과)
+  // - 현재: localStorage(brandInterview_*_v1) 존재 여부로 완료/미진행 판단 + 화면 렌더
+  // - 백엔드 연동 시(명세서 기준) 대체 흐름:
+  //   1) 마이페이지 기본정보:        GET /mypage
+  //   2) 생성한 브랜드 목록:        GET /mypage/brands
+  //   3) 선택 브랜드 산출물(전체):  GET /mypage/brands/{brandId}/outputs
+  //   4) 서비스별 산출물(상세):
+  //      - 스토리: GET /mypage/brands/{brandId}/outputs/story
+  //      - 네이밍: GET /mypage/brands/{brandId}/outputs/naming
+  //      - 로고:   GET /mypage/brands/{brandId}/outputs/logo
+  //   5) (옵션) 진단 리포트:        GET /mypage/brands/{brandId}/report
+  // - 구현은 useEffect에서 호출 → state 저장 → 완료 여부는 응답 존재 여부로 판단
 
   const BRAND_SERVICES = useMemo(
     () => [

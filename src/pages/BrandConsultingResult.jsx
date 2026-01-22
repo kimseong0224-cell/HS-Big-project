@@ -285,6 +285,15 @@ export default function BrandConsultingResult({ onLogout }) {
   }, [location.search]);
 
   const config = SERVICE_CONFIG[service];
+  // 🔌 BACKEND 연동 포인트 (브랜드 결과 화면)
+  // - 현재: localStorage(config.storageKey)에서 form/updatedAt을 읽어 화면에 표시
+  // - 백엔드 연동 시(명세서 기준) 결과 데이터 출처 후보:
+  //   1) 서비스별 산출물 조회: GET /brands/story, GET /brands/naming, GET /brands/logo
+  //   2) 종합 리포트:        GET /brands/finalreport  (명세서에 존재)
+  //   3) 인터뷰 리포트:      GET /brands/{brandId}/report
+  // - 구현 방법(권장):
+  //   - 로그인 토큰으로 brandId(또는 선택한 brandId)를 확보한 뒤,
+  //   - useEffect에서 fetch/axios로 위 엔드포인트 호출 → 응답을 state에 저장 → 렌더
 
   const draft = useMemo(() => {
     try {

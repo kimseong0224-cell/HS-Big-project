@@ -251,6 +251,13 @@ export default function NamingConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (네이밍 컨설팅 - AI 분석 요청 버튼)
+    // - 현재 로직: form 값을 localStorage에 저장 → /brand/result?service=naming 로 이동
+    // - 백엔드 연동 시(명세서 기준):
+    //   A) 인터뷰 저장(공통): POST /brands/interview
+    //   B) 네이밍 생성:      POST /brands/naming
+    //      → 이후 결과 조회: GET  /brands/naming (param: name)
+    // - 실제 요청/응답 스키마(brandId 포함 여부 등)는 백엔드와 최종 합의 필요
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

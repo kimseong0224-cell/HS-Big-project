@@ -59,6 +59,14 @@ export default function PromotionAllResults({ onLogout }) {
 
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
+  // 🔌 BACKEND 연동 포인트 (마이페이지용: 홍보물 컨설팅 전체 결과)
+  // - 현재: localStorage(promotionInterview_*_v1) 존재 여부로 완료/미진행 판단 + 화면 렌더
+  // - 백엔드 연동 시(명세서 기준) 대체 흐름:
+  //   - 포스터: GET /brands/posters
+  //   - SNS:   GET /brands/sns
+  //   - 영상:  GET /brands/videos
+  //   (마이페이지에서 브랜드별로 구분해야 하면 /mypage/brands/{brandId}/outputs 쪽으로 확장 필요)
+  // - 구현은 useEffect에서 호출 → state 저장 → 완료 여부는 응답 존재 여부로 판단
 
   const PROMO_SERVICES = useMemo(
     () => [

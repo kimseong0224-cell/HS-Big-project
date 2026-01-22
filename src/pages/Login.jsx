@@ -12,25 +12,59 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 import EasyLoginModal from "../components/EasyLoginModal.jsx";
 
+import * as authApi from "../api/authApi";
+import { setToken } from "../utils/auth";
+
 export default function LoginApp() {
   const navigate = useNavigate();
 
-  // ✅ "privacy" | "terms" | null
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  // ✅ 간편로그인 모달
   const [easyOpen, setEasyOpen] = useState(false);
 
-  const handleSubmit = (event) => {
+  const [id, setId] = useState("");
+  const [password, setPassword] = useState("");
+
+  const [errorMsg, setErrorMsg] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    // TODO: 실제 로그인 성공 시에만 이동
-    navigate("/main");
+    setErrorMsg("");
+
+    const safeId = id.trim();
+    const safePw = password;
+
+    if (!safeId) return setErrorMsg("아이디를 입력해주세요.");
+    if (!safePw) return setErrorMsg("비밀번호를 입력해주세요.");
+
+    setIsLoading(true);
+    try {
+      // POST /auth/login  body: { loginId, password }
+      const data = await authApi.login({ loginId: safeId, password: safePw });
+
+      // Swagger 예시: { accessToken: "..." }
+      if (!data?.accessToken) {
+        throw new Error("토큰이 반환되지 않았습니다. (백 응답 확인 필요)");
+      }
+
+      setToken(data.accessToken);
+      navigate("/main");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "로그인 실패";
+      setErrorMsg(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="login-page navy">
-      {/* ✅ 개인정보/약관 모달 */}
       <PolicyModal
         open={openType === "privacy"}
         title="개인정보 처리방침"
@@ -47,7 +81,6 @@ export default function LoginApp() {
         <TermsContent />
       </PolicyModal>
 
-      {/* ✅ 간편로그인 모달 */}
       <EasyLoginModal open={easyOpen} onClose={() => setEasyOpen(false)} />
 
       <div className="login-shell split">
@@ -89,7 +122,7 @@ export default function LoginApp() {
                 <p>기업 관련 소개글 등 기업관련 홍보글을 생성해줍니다.</p>
               </div>
 
-              {/* 끊김 방지 반복 */}
+              {/* 반복 */}
               <div className="marquee-card">
                 <img src={namingLogoImg} alt="네이밍 로고 추천" />
                 <strong>네이밍·로고 추천</strong>
@@ -157,12 +190,15 @@ export default function LoginApp() {
 
           <form className="login-form" onSubmit={handleSubmit}>
             <div className="field">
-              <label htmlFor="login-id">아이디 (E-mail 계정)</label>
+              <label htmlFor="login-id">아이디</label>
               <input
                 id="login-id"
-                type="email"
-                placeholder="이메일 아이디"
-                autoComplete="email"
+                type="text"
+                placeholder="아이디 입력"
+                autoComplete="username"
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+                disabled={isLoading}
               />
             </div>
 
@@ -173,6 +209,9 @@ export default function LoginApp() {
                 type="password"
                 placeholder="비밀번호 입력"
                 autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading}
               />
             </div>
 
@@ -186,23 +225,24 @@ export default function LoginApp() {
               </button>
             </div>
 
-            <button type="submit" className="login-primary">
-              로그인
+            {errorMsg ? <p className="error">{errorMsg}</p> : null}
+
+            <button
+              type="submit"
+              className="login-primary"
+              disabled={isLoading}
+            >
+              {isLoading ? "로그인 중..." : "로그인"}
             </button>
 
-            {/* ✅ 간편로그인: 모달 띄우기 */}
             <button
               type="button"
               className="login-easy"
               onClick={() => setEasyOpen(true)}
+              disabled={isLoading}
             >
               간편로그인
             </button>
-
-            {/* (원하면 모달 말고 페이지로) */}
-            {/* <button type="button" className="login-easy" onClick={() => navigate("/easylogin")}>
-              간편로그인
-            </button> */}
 
             <div className="login-divider" />
 
@@ -215,6 +255,7 @@ export default function LoginApp() {
                 type="button"
                 className="signup-cta"
                 onClick={() => navigate("/signup")}
+                disabled={isLoading}
               >
                 회원가입
               </button>

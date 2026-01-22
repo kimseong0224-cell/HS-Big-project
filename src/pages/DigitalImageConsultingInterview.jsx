@@ -62,7 +62,7 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
       { id: "q4", label: "방해 요소", ref: refQ4 },
       { id: "extra", label: "추가 정보", ref: refExtra },
     ],
-    []
+    [],
   );
 
   // ✅ 필수 항목(사진 질문 중심)
@@ -74,7 +74,7 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
       "brandAssets",
       "avoidElements",
     ],
-    []
+    [],
   );
 
   const requiredStatus = useMemo(() => {
@@ -174,6 +174,12 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (홍보물-디지털/SNS - AI 분석 요청)
+    // - 현재: form을 localStorage에 저장 → /promotion/result?service=digital 로 이동
+    // - 백엔드 명세서 후보 매핑:
+    //   - SNS 홍보물 제작: POST /brands/sns
+    //   - 생성 결과 조회:  GET  /brands/sns
+    // - 실제로 'digital'이 /sns 인지, /posters 인지 팀과 최종 매핑 필요
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

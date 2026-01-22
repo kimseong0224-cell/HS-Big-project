@@ -59,7 +59,7 @@ export default function OfflineConsultingInterview({ onLogout }) {
       { id: "q4", label: "방해 요소", ref: refQ4 },
       { id: "extra", label: "추가 정보", ref: refExtra },
     ],
-    []
+    [],
   );
 
   const requiredKeys = useMemo(
@@ -70,7 +70,7 @@ export default function OfflineConsultingInterview({ onLogout }) {
       "brandAssets",
       "avoidElements",
     ],
-    []
+    [],
   );
 
   const requiredStatus = useMemo(() => {
@@ -83,7 +83,7 @@ export default function OfflineConsultingInterview({ onLogout }) {
 
   const completedRequired = useMemo(
     () => requiredKeys.filter((k) => requiredStatus[k]).length,
-    [requiredKeys, requiredStatus]
+    [requiredKeys, requiredStatus],
   );
 
   const progress = useMemo(() => {
@@ -168,6 +168,12 @@ export default function OfflineConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (홍보물-오프라인/포스터 - AI 분석 요청)
+    // - 현재: form을 localStorage에 저장 → /promotion/result?service=offline 로 이동
+    // - 백엔드 명세서 후보 매핑:
+    //   - 홍보 포스터 제작: POST /brands/posters
+    //   - 생성 결과 조회:  GET  /brands/posters
+    // - 결과가 이미지 URL로 오면(imgUrl 등) <img src=...>로 렌더하면 됩니다.
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

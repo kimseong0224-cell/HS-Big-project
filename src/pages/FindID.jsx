@@ -4,15 +4,21 @@ import { useNavigate } from "react-router-dom";
 
 import SiteFooter from "../components/SiteFooter.jsx";
 
+/**
+ * [FindID] 아이디 찾기 페이지 (프론트-only)
+ * - 이름 + 휴대폰 번호로 가입된 "아이디"를 확인(마스킹 표시)
+ */
 export default function FindID() {
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [maskedEmail, setMaskedEmail] = useState("");
+  // ✅ maskedEmail → maskedId로 변경
+  const [maskedId, setMaskedId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
   const [loading, setLoading] = useState(false);
 
   const isPhoneLike = useMemo(() => {
@@ -20,17 +26,17 @@ export default function FindID() {
     return onlyNum.length >= 10 && onlyNum.length <= 11;
   }, [phone]);
 
-  const maskEmail = (email) => {
-    if (!email || !email.includes("@")) return "";
-    const [local, domain] = email.split("@");
-    if (!domain) return "";
-
-    if (local.length <= 1) return `*@${domain}`;
-    if (local.length === 2) return `${local[0]}*@${domain}`;
-
-    const keep = Math.min(2, local.length - 1);
-    const masked = `${local.slice(0, keep)}${"*".repeat(local.length - keep)}`;
-    return `${masked}@${domain}`;
+  /**
+   * ✅ 아이디 마스킹
+   * - 예: brandpilot_01 → br********
+   */
+  const maskId = (rawId) => {
+    const v = String(rawId || "").trim();
+    if (!v) return "";
+    if (v.length <= 1) return "*";
+    if (v.length === 2) return `${v[0]}*`;
+    const keep = 2;
+    return `${v.slice(0, keep)}${"*".repeat(v.length - keep)}`;
   };
 
   const resetAlerts = () => {
@@ -41,7 +47,7 @@ export default function FindID() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     resetAlerts();
-    setMaskedEmail("");
+    setMaskedId("");
 
     const safeName = name.trim();
     if (!safeName) return setError("이름을 입력해주세요.");
@@ -51,12 +57,15 @@ export default function FindID() {
 
     setLoading(true);
     try {
-      // ✅ 실제 서비스라면 백엔드 API 호출로 교체
+      // ✅ 프론트-only mock
       const phoneNormalized = phone.replace(/\D/g, "");
-      const mockLocal = safeName.replace(/\s+/g, "").toLowerCase() || "user";
-      const mockEmail = `${mockLocal}${phoneNormalized.slice(-2)}@example.com`;
 
-      setMaskedEmail(maskEmail(mockEmail));
+      // 이름 기반으로 mock id 만들기(공백 제거 + 소문자 + 마지막 2자리)
+      const base = safeName.replace(/\s+/g, "").toLowerCase();
+      const cleanBase = base.replace(/[^a-z0-9_]/g, "") || "user";
+      const mockId = `${cleanBase}_${phoneNormalized.slice(-2)}`;
+
+      setMaskedId(maskId(mockId));
       setMessage("입력하신 정보로 가입된 아이디를 확인했습니다.");
     } catch {
       setError("아이디 조회에 실패했습니다. 잠시 후 다시 시도해주세요.");
@@ -65,7 +74,7 @@ export default function FindID() {
     }
   };
 
-  const locked = Boolean(maskedEmail); // ✅ 결과가 뜨면 입력 잠금(선택)
+  const locked = Boolean(maskedId);
 
   return (
     <div className="findid-page">
@@ -110,28 +119,25 @@ export default function FindID() {
             </small>
           </div>
 
-          {/* ✅ 결과 박스 */}
-          {maskedEmail ? (
+          {maskedId ? (
             <div className="resultBox" role="status" aria-live="polite">
               <div className="resultTop">
                 <span className="resultBadge">확인 완료</span>
                 <span className="resultLabel">확인된 아이디</span>
               </div>
-              <div className="resultValue">{maskedEmail}</div>
+              <div className="resultValue">{maskedId}</div>
               <div className="resultHint">
                 보안상 아이디는 일부 마스킹되어 표시됩니다.
               </div>
             </div>
           ) : null}
 
-          {/* ✅ 핵심: 결과가 뜨면 확인 버튼 숨김 */}
-          {!maskedEmail ? (
+          {!maskedId ? (
             <button type="submit" className="primary" disabled={loading}>
               {loading ? "조회 중..." : "확인"}
             </button>
           ) : null}
 
-          {/* ✅ 로그인 버튼은 항상 남기기 + 파란색(primary) */}
           <button
             type="button"
             className="primary"

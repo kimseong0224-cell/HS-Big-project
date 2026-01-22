@@ -3,36 +3,46 @@ import React, { useMemo, useState, forwardRef } from "react";
 import { useNavigate } from "react-router-dom";
 import DatePicker from "react-datepicker";
 
-// ✅ 공통 푸터/약관 모달
 import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+import * as authApi from "../api/authApi";
+
 export default function SignupApp() {
   const navigate = useNavigate();
+
   const [birthDate, setBirthDate] = useState(null);
 
-  // ✅ 입력값 state (검증용)
+  // ✅ loginId
+  const [id, setId] = useState("");
+
+  // ✅ email 추가 (Swagger에 있음)
   const [email, setEmail] = useState("");
+
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
-  // ✅ 약관 체크
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
 
-  // ✅ 모달 열기 타입
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  // ✅ 에러 메시지
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const isIdLike = useMemo(() => {
+    const v = id.trim();
+    return /^[a-zA-Z0-9_]{4,20}$/.test(v);
+  }, [id]);
 
   const isEmailLike = useMemo(() => {
     const v = email.trim();
-    return v.includes("@") && v.includes(".");
+    // 가벼운 이메일 검증
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
   }, [email]);
 
   const isPhoneLike = useMemo(() => {
@@ -40,7 +50,6 @@ export default function SignupApp() {
     return onlyNum.length >= 10 && onlyNum.length <= 11;
   }, [phone]);
 
-  // ✅ 비밀번호 규칙: 8자 + 대문자 + 숫자 + 특수문자
   const pwRules = useMemo(() => {
     const v = pw;
     return {
@@ -56,12 +65,22 @@ export default function SignupApp() {
 
   const pwMatch = useMemo(() => pw && pw2 && pw === pw2, [pw, pw2]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!email.trim()) return setError("아이디(이메일)를 입력해주세요.");
-    if (!isEmailLike) return setError("아이디는 이메일 형식으로 입력해주세요.");
+    // ====== 프론트 검증 ======
+    const safeId = id.trim();
+    const safeEmail = email.trim();
+    const safeName = name.trim();
+    const onlyPhone = phone.replace(/\D/g, "");
+
+    if (!safeId) return setError("아이디를 입력해주세요.");
+    if (!isIdLike)
+      return setError("아이디는 4~20자, 영문/숫자/_ 형태로 입력해주세요.");
+
+    if (!safeEmail) return setError("이메일을 입력해주세요.");
+    if (!isEmailLike) return setError("이메일 형식을 확인해주세요.");
 
     if (!pwValid) {
       return setError(
@@ -70,7 +89,7 @@ export default function SignupApp() {
     }
     if (!pwMatch) return setError("비밀번호 확인이 일치하지 않습니다.");
 
-    if (!name.trim()) return setError("이름을 입력해주세요.");
+    if (!safeName) return setError("이름을 입력해주세요.");
     if (!phone.trim()) return setError("휴대폰 번호를 입력해주세요.");
     if (!isPhoneLike)
       return setError("휴대폰 번호는 숫자만 10~11자리로 입력해주세요.");
@@ -80,14 +99,35 @@ export default function SignupApp() {
     if (!agreeTerms || !agreePrivacy)
       return setError("필수 약관에 동의해주세요.");
 
-    // ✅ 테스트 동작
-    alert("회원가입 (테스트)");
-    navigate("/login");
+    // ====== 백엔드 요청 (Swagger 기준) ======
+    // POST /auth/register
+    // body: { loginId, email, password, mobileNumber, username }
+    setIsLoading(true);
+    try {
+      await authApi.register({
+        loginId: safeId,
+        email: safeEmail,
+        password: pw,
+        mobileNumber: onlyPhone,
+        username: safeName,
+      });
+
+      alert("회원가입 완료! 로그인 해주세요.");
+      navigate("/login");
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "회원가입 실패";
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="signup-page">
-      {/* ✅ 약관/개인정보 모달 */}
       <PolicyModal
         open={openType === "terms"}
         title="이용약관"
@@ -112,14 +152,31 @@ export default function SignupApp() {
             <label htmlFor="signup-id">아이디</label>
             <input
               id="signup-id"
+              type="text"
+              placeholder="아이디 입력"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              autoComplete="username"
+              disabled={isLoading}
+            />
+            <small className="hint">
+              * 4~20자, 영문/숫자/_ 형태로 입력해주세요.
+            </small>
+          </div>
+
+          {/* ✅ email 추가 */}
+          {/* <div className="field">
+            <label htmlFor="signup-email">이메일</label>
+            <input
+              id="signup-email"
               type="email"
-              placeholder="이메일 아이디"
+              placeholder="이메일 입력"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              disabled={isLoading}
             />
-            <small className="hint">* 이메일 형식으로 입력해주세요.</small>
-          </div>
+          </div> */}
 
           <div className="field">
             <label htmlFor="signup-password">비밀번호</label>
@@ -130,12 +187,12 @@ export default function SignupApp() {
               value={pw}
               onChange={(e) => setPw(e.target.value)}
               autoComplete="new-password"
+              disabled={isLoading}
             />
             <small className="hint">
               * 8자 이상, <b>대문자</b>, 숫자, 특수문자를 포함해주세요.
             </small>
 
-            {/* ✅ 규칙 체크 */}
             <div className="checkline">
               <span className={`pill ${pwRules.lenOk ? "ok" : ""}`}>8자+</span>
               <span className={`pill ${pwRules.upperOk ? "ok" : ""}`}>
@@ -157,6 +214,7 @@ export default function SignupApp() {
               value={pw2}
               onChange={(e) => setPw2(e.target.value)}
               autoComplete="new-password"
+              disabled={isLoading}
             />
             <div className="checkline">
               <span className={`pill ${pwMatch ? "ok" : ""}`}>일치</span>
@@ -172,6 +230,7 @@ export default function SignupApp() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
+              disabled={isLoading}
             />
           </div>
 
@@ -184,6 +243,7 @@ export default function SignupApp() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               autoComplete="tel"
+              disabled={isLoading}
             />
           </div>
 
@@ -199,16 +259,17 @@ export default function SignupApp() {
               dropdownMode="select"
               maxDate={new Date()}
               customInput={<DateInput />}
+              disabled={isLoading}
             />
           </div>
 
-          {/* ✅ 약관: 보기 버튼 누르면 모달 열기 */}
           <div className="terms">
             <label className="check">
               <input
                 type="checkbox"
                 checked={agreeTerms}
                 onChange={(e) => setAgreeTerms(e.target.checked)}
+                disabled={isLoading}
               />
               이용약관 동의 (필수)
             </label>
@@ -216,6 +277,7 @@ export default function SignupApp() {
               type="button"
               className="link-button"
               onClick={() => setOpenType("terms")}
+              disabled={isLoading}
             >
               보기
             </button>
@@ -227,6 +289,7 @@ export default function SignupApp() {
                 type="checkbox"
                 checked={agreePrivacy}
                 onChange={(e) => setAgreePrivacy(e.target.checked)}
+                disabled={isLoading}
               />
               개인정보 처리방침 동의 (필수)
             </label>
@@ -234,22 +297,23 @@ export default function SignupApp() {
               type="button"
               className="link-button"
               onClick={() => setOpenType("privacy")}
+              disabled={isLoading}
             >
               보기
             </button>
           </div>
 
-          {/* ✅ 에러 표시 */}
           {error ? <p className="error">{error}</p> : null}
 
           <div className="button-row">
-            <button type="submit" className="primary">
-              회원가입 하기
+            <button type="submit" className="primary" disabled={isLoading}>
+              {isLoading ? "가입 중..." : "회원가입 하기"}
             </button>
             <button
               type="button"
               className="primary"
               onClick={() => navigate("/login")}
+              disabled={isLoading}
             >
               돌아가기
             </button>
@@ -257,7 +321,6 @@ export default function SignupApp() {
         </form>
       </main>
 
-      {/* ✅ 공통 푸터 적용 (메인/기업진단과 동일) */}
       <SiteFooter onOpenPolicy={setOpenType} />
     </div>
   );

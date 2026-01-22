@@ -259,6 +259,13 @@ export default function LogoConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (로고 컨설팅 - AI 분석 요청 버튼)
+    // - 현재 로직: form 값을 localStorage에 저장 → /brand/result?service=logo 로 이동
+    // - 백엔드 연동 시(명세서 기준) 선택지:
+    //   A) 인터뷰 저장(공통): POST /brands/interview (param: interview content)
+    //   B) 로고 생성:        POST /brands/logo      (param: interview content)
+    //      → 이후 결과 조회: GET /brands/logo       (param: logourl)
+    // - 실제 요청/응답 스키마(brandId 포함 여부 등)는 백엔드와 최종 합의 필요
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

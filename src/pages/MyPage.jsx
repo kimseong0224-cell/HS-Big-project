@@ -36,6 +36,18 @@ export default function MyPage({ onLogout }) {
   const [brandName, setBrandName] = useState("");
   const hasBrand = brandName.trim().length > 0;
 
+  // 🔌 BACKEND 연동 포인트 (마이페이지)
+  // - 현재 구현: localStorage 키 존재 여부로 서비스별 완료/미진행(done) 상태를 계산
+  // - 백엔드 연동 시(명세서 기준) 이 로직을 API 응답으로 교체하면 됩니다.
+  //   1) 마이페이지 기본정보:        GET /mypage
+  //   2) 생성한 브랜드 목록:        GET /mypage/brands
+  //   3) 선택 브랜드 상세/요약:     GET /mypage/brands/{brandId}
+  //   4) 진단 리포트:              GET /mypage/brands/{brandId}/report
+  //   5) 브랜드 산출물(전체):       GET /mypage/brands/{brandId}/outputs
+  //   6) 브랜드 산출물(서비스별):  GET /mypage/brands/{brandId}/outputs/story|naming|logo
+  // - 홍보물은 현재 명세서가 brandId 분리가 없으므로( /brands/posters|sns|videos )
+  //   브랜드별로 관리하려면 백엔드 스펙 확장 여부를 팀과 논의하세요.
+
   // ✅ 기업진단 결과(너 프로젝트에 결과 페이지 있다고 했으니 true/false는 나중에 실제키로 바꿔도 됨)
   const diagnosisDone = useMemo(() => {
     // DiagnosisResult가 어떤 key로 저장하는지 확실치 않아서,

@@ -42,6 +42,13 @@ export default function PromotionResult({ onLogout }) {
 
   const storageKey = KEY_MAP[service];
   const title = LABEL_MAP[service];
+  // 🔌 BACKEND 연동 포인트 (홍보물 결과 화면)
+  // - 현재: localStorage에서 service별 결과를 읽어 표시
+  // - 백엔드 연동 시(명세서 기준) 결과 데이터 출처 후보:
+  //   - 포스터: GET /brands/posters
+  //   - SNS:   GET /brands/sns
+  //   - 영상:  GET /brands/videos
+  // - 실제로 service(digital/offline/video) ↔ 엔드포인트 매핑은 팀과 확정 필요
 
   const draft = useMemo(() => {
     try {
@@ -70,31 +77,31 @@ export default function PromotionResult({ onLogout }) {
     const out = [];
     if (purpose)
       out.push(
-        `목적(${purpose})에 맞게 ‘한 문장 메시지 + 핵심 CTA’를 상단에 고정하는 구성을 추천해요.`
+        `목적(${purpose})에 맞게 ‘한 문장 메시지 + 핵심 CTA’를 상단에 고정하는 구성을 추천해요.`,
       );
     else
       out.push(
-        "목적(사용처)을 먼저 확정하면 디자인 방향이 빨라져요. (예: SNS, 배너, 상세페이지 등)"
+        "목적(사용처)을 먼저 확정하면 디자인 방향이 빨라져요. (예: SNS, 배너, 상세페이지 등)",
       );
 
     if (target)
       out.push(
-        `타깃(${target})에게 통하는 톤(신뢰/캐주얼/프리미엄)을 먼저 정하고 컬러/폰트를 맞춰요.`
+        `타깃(${target})에게 통하는 톤(신뢰/캐주얼/프리미엄)을 먼저 정하고 컬러/폰트를 맞춰요.`,
       );
     else out.push("타깃이 정해지면 색/이미지/카피 톤이 크게 좋아져요.");
 
     if (brandAsset)
       out.push(
-        "브랜드 자산(로고/컬러/폰트)이 있으면 통일감이 생겨요. 가이드 유무를 체크해요."
+        "브랜드 자산(로고/컬러/폰트)이 있으면 통일감이 생겨요. 가이드 유무를 체크해요.",
       );
     else
       out.push(
-        "로고/컬러/폰트 가이드가 없으면 기본 세트를 먼저 정하는 걸 추천해요."
+        "로고/컬러/폰트 가이드가 없으면 기본 세트를 먼저 정하는 걸 추천해요.",
       );
 
     if (avoid)
       out.push(
-        "‘빼고 싶은 요소’를 명확히 하면 시안 품질이 빨리 올라가요. 금지 요소 리스트는 유효합니다."
+        "‘빼고 싶은 요소’를 명확히 하면 시안 품질이 빨리 올라가요. 금지 요소 리스트는 유효합니다.",
       );
     return out;
   }, [form]);

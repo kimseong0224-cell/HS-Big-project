@@ -42,6 +42,8 @@ import "./styles/PromotionResult.css";
 import "./styles/BrandConsultingResult.css";
 
 import "./styles/InvestmentBoard.css";
+import "./styles/InvestmentPostCreate.css";
+import "./styles/InvestmentPostDetail.css";
 import "./styles/BrandStoryConsultingInterview.css";
 
 import "./styles/BrandAllResults.css";

@@ -284,6 +284,13 @@ export default function HomepageConsultingInterview({ onLogout }) {
   };
 
   const handleAnalyze = () => {
+    // 🔌 BACKEND 연동 포인트 (홈페이지 컨설팅 - AI 분석 요청 버튼)
+    // - 현재 로직: form 값을 localStorage에 저장 → /brand/result?service=homepage 로 이동
+    // - 주의: 현재 공유된 백엔드 명세서(스크린샷)에는 '홈페이지 생성' 전용 엔드포인트가 보이지 않습니다.
+    //   → 팀 합의 후 아래 중 하나로 정리 필요:
+    //     1) /brands/homepage 같은 신규 엔드포인트 추가
+    //     2) /brands/interview + /brands/finalreport 흐름에 홈페이지 리포트를 포함
+    // - 엔드포인트가 확정되면 여기서 fetch/axios로 요청을 보내고, 응답을 저장/표시하면 됩니다.
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
       return;

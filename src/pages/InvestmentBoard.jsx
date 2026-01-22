@@ -7,110 +7,90 @@ import SiteFooter from "../components/SiteFooter.jsx";
 
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
+import { getCurrentUserId } from "../utils/auth.js";
+
+const POSTS_STORAGE_KEY = "investmentPosts";
 
 export default function InvestmentBoard({ onLogout }) {
   const navigate = useNavigate();
+  const currentUserId = getCurrentUserId();
 
-  // ✅ 약관/방침 모달
+  // 정책 모달
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  // ✅ 검색/필터
+  // 검색/필터
   const [q, setQ] = useState("");
-  const [stage, setStage] = useState("all");
+  const [region, setRegion] = useState("all");
+  const [size, setSize] = useState("all");
   const [sort, setSort] = useState("popular"); // popular | newest
 
-  // ✅ 더미 데이터 (나중에 API로 교체)
-  const items = useMemo(
-    () => [
-      {
-        id: "seltasq",
-        name: "셀타스퀘어",
-        oneLiner: "AI 전구약 알림 서비스 · AI CRO",
-        stage: "Series A",
-        location: "서울",
-        tags: ["AI헬스", "B2C"],
-        amount: "92억+ TIPS",
-        status: "투자 완료",
-        popularity: 98,
-        updatedAt: "2026-01-10",
-      },
-      {
-        id: "linkflow",
-        name: "링크플로우",
-        oneLiner: "인공지능(AI) 웨어러블 전문",
-        stage: "Series B",
-        location: "경기",
-        tags: ["AI", "웨어러블"],
-        amount: "409억",
-        status: "라운드 준비",
-        popularity: 91,
-        updatedAt: "2026-01-12",
-      },
-      {
-        id: "beamworks",
-        name: "빔웍스",
-        oneLiner: "초음파 AI 진단 센서 기반 헬스케어",
-        stage: "Pre-IPO",
-        location: "대전",
-        tags: ["헬스케어", "AI"],
-        amount: "170억",
-        status: "투자 완료",
-        popularity: 86,
-        updatedAt: "2026-01-08",
-      },
-      {
-        id: "novaleaf",
-        name: "노바리프",
-        oneLiner: "친환경 소재 기반 패키징 솔루션",
-        stage: "Seed",
-        location: "부산",
-        tags: ["그린테크", "제조혁신"],
-        amount: "18억",
-        status: "투자 완료",
-        popularity: 77,
-        updatedAt: "2026-01-05",
-      },
-      {
-        id: "bioloop",
-        name: "바이오루프",
-        oneLiner: "정밀 건강관리 바이오 데이터 플랫폼",
-        stage: "Series A",
-        location: "서울",
-        tags: ["바이오", "데이터"],
-        amount: "65억",
-        status: "진행 중",
-        popularity: 82,
-        updatedAt: "2026-01-14",
-      },
-      {
-        id: "cloudwave",
-        name: "클라우드웨이브",
-        oneLiner: "제조 특화 SaaS 운영 자동화",
-        stage: "Series B",
-        location: "대구",
-        tags: ["SaaS", "제조"],
-        amount: "210억",
-        status: "투자 완료",
-        popularity: 79,
-        updatedAt: "2026-01-03",
-      },
-    ],
-    []
+  // 더미 데이터 제거: API 연동 전까지 비워둠
+  const items = useMemo(() => [], []);
+
+  const savedItems = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(POSTS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((item, index) => ({
+        id: item.id || `local-${index}`,
+        authorId: item.authorId || null,
+        name: item.company || "회사명",
+        oneLiner: item.oneLiner || "",
+        logoImageUrl: item.logoImageUrl || "",
+        tags: Array.isArray(item.hashtags)
+          ? item.hashtags.map((tag) => tag.trim()).filter(Boolean)
+          : [],
+        locations: Array.isArray(item.locations)
+          ? item.locations
+          : item.location
+            ? [item.location]
+            : [],
+        companySizes: Array.isArray(item.companySizes)
+          ? item.companySizes
+          : item.companySize
+            ? [item.companySize]
+            : [],
+        popularity: 0,
+        updatedAt: item.updatedAt || "2026-01-01",
+        kind: "preview",
+      }));
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }, []);
+
+  const combinedItems = useMemo(
+    () => [...savedItems, ...items],
+    [items, savedItems]
   );
 
   const filtered = useMemo(() => {
     const keyword = q.trim().toLowerCase();
 
-    let out = items.filter((it) => {
+    let out = combinedItems.filter((it) => {
       const hit =
         !keyword ||
         it.name.toLowerCase().includes(keyword) ||
         it.oneLiner.toLowerCase().includes(keyword) ||
         it.tags.join(" ").toLowerCase().includes(keyword);
 
-      const stageOk = stage === "all" ? true : it.stage === stage;
-      return hit && stageOk;
+      const regionOk =
+        region === "all"
+          ? true
+          : Array.isArray(it.locations)
+            ? it.locations.includes(region)
+            : it.location === region;
+      const sizeOk =
+        size === "all"
+          ? true
+          : Array.isArray(it.companySizes)
+            ? it.companySizes.includes(size)
+            : it.companySize === size;
+      return hit && regionOk && sizeOk;
     });
 
     if (sort === "newest") {
@@ -120,20 +100,41 @@ export default function InvestmentBoard({ onLogout }) {
     }
 
     return out;
-  }, [items, q, stage, sort]);
+  }, [combinedItems, q, region, size, sort]);
 
-  const stageOptions = [
+  const locationOptions = [
     "all",
-    "Seed",
-    "Pre A",
-    "Series A",
-    "Series B",
-    "Pre-IPO",
+    "서울",
+    "경기",
+    "인천",
+    "부산",
+    "대구",
+    "광주",
+    "대전",
+    "울산",
+    "세종",
+    "강원",
+    "충북",
+    "충남",
+    "전북",
+    "전남",
+    "경북",
+    "경남",
+    "제주",
+  ];
+
+  const companySizeOptions = [
+    "all",
+    "예비 창업 / 개인",
+    "스타트업",
+    "중소기업",
+    "중견기업",
+    "대기업",
   ];
 
   return (
     <div className="invest-page">
-      {/* ✅ 약관/방침 모달 */}
+      {/* 정책 모달 */}
       <PolicyModal
         open={openType === "privacy"}
         title="개인정보 처리방침"
@@ -158,8 +159,7 @@ export default function InvestmentBoard({ onLogout }) {
             <div>
               <h1 className="invest-title">투자 라운지</h1>
               <p className="invest-sub">
-                스타트업 투자유치/성과 정보를 한곳에서 확인하세요. (현재는 더미
-                데이터)
+                투자자와 기업을 연결하는 기업 홍보 공간입니다.
               </p>
             </div>
 
@@ -174,7 +174,7 @@ export default function InvestmentBoard({ onLogout }) {
               <button
                 type="button"
                 className="btn"
-                onClick={() => alert("등록 기능 (준비중)")}
+                onClick={() => navigate("/investment/new")}
               >
                 게시글 등록
               </button>
@@ -187,19 +187,19 @@ export default function InvestmentBoard({ onLogout }) {
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="회사명/키워드/태그로 검색"
-                aria-label="투자유치 게시판 검색"
+                aria-label="투자유치 게시글 검색"
               />
             </div>
 
             <div className="invest-controls">
               <select
-                value={stage}
-                onChange={(e) => setStage(e.target.value)}
-                aria-label="단계 필터"
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                aria-label="지역 필터"
               >
-                {stageOptions.map((s) => (
-                  <option key={s} value={s}>
-                    {s === "all" ? "전체 단계" : s}
+                {locationOptions.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc === "all" ? "전체 지역" : loc}
                   </option>
                 ))}
               </select>
@@ -216,66 +216,133 @@ export default function InvestmentBoard({ onLogout }) {
           </div>
 
           <div className="invest-chips">
-            {stageOptions.map((s) => (
+            {companySizeOptions.map((value) => (
               <button
-                key={s}
+                key={value}
                 type="button"
-                className={`chip ${stage === s ? "is-active" : ""}`}
-                onClick={() => setStage(s)}
+                className={`chip ${size === value ? "is-active" : ""}`}
+                onClick={() => setSize(value)}
               >
-                {s === "all" ? "전체" : s}
+                {value === "all" ? "전체" : value}
               </button>
             ))}
           </div>
         </section>
 
         <section className="invest-grid" aria-label="투자유치 게시글 목록">
-          {filtered.map((it) => (
-            <article
-              key={it.id}
-              className="invest-card"
-              role="button"
-              tabIndex={0}
-              onClick={() => alert(`${it.name} 상세 페이지 (준비중)`)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ")
-                  alert(`${it.name} 상세 페이지 (준비중)`);
-              }}
-            >
-              <div className="invest-card-head">
-                <div className="invest-logo" aria-hidden="true">
-                  {it.name.slice(0, 2).toUpperCase()}
-                </div>
-                <div className="invest-head-text">
-                  <h3>{it.name}</h3>
-                  <p>{it.oneLiner}</p>
-                </div>
-              </div>
+          {filtered.map((it) => {
+            if (it.kind === "preview") {
+              const logoText = it.name.slice(0, 2).toUpperCase();
+              const locationText = [
+                Array.isArray(it.locations) ? it.locations.join(", ") : it.location,
+                Array.isArray(it.companySizes)
+                  ? it.companySizes.join(", ")
+                  : it.companySize,
+              ]
+                .filter(Boolean)
+                .join(", ");
+              const isOwner =
+                it.authorId && currentUserId && it.authorId === currentUserId;
+              const detailPath = `/investment/${it.id}`;
+              const editPath = `/investment/edit/${it.id}`;
+              const targetPath = isOwner ? editPath : detailPath;
 
-              <div className="invest-meta">
-                <span className="pill">{it.stage}</span>
-                <span className="pill ghost">{it.location}</span>
-                <span
-                  className={`pill ${it.status === "투자 완료" ? "success" : "warning"}`}
+              return (
+                <article
+                  key={it.id}
+                  className="invest-preview invest-preview--board"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(targetPath)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ")
+                      navigate(targetPath);
+                  }}
                 >
-                  {it.status}
-                </span>
-              </div>
+                  <div className="invest-preview-top">
+                    <div className="invest-preview-text">
+                      <h3>{it.name}</h3>
+                      <p className="invest-preview-oneliner">
+                        {it.oneLiner || "한 줄 소개가 표시됩니다."}
+                      </p>
+                    </div>
+                    <div className="invest-preview-logo" aria-hidden="true">
+                      {it.logoImageUrl ? (
+                        <img src={it.logoImageUrl} alt="로고 미리보기" />
+                      ) : (
+                        logoText
+                      )}
+                    </div>
+                  </div>
+                  <div className="invest-preview-tags">
+                    {it.tags.length === 0 ? (
+                      <span className="empty">태그를 입력해 주세요.</span>
+                    ) : (
+                      it.tags.map((tag) => <span key={tag}>#{tag}</span>)
+                    )}
+                  </div>
+                  <div className="invest-preview-bottom">
+                    <div className="invest-preview-meta">
+                      <div className="invest-preview-status">{locationText}</div>
+                      <div className="invest-preview-updated">
+                        업데이트: {it.updatedAt}
+                      </div>
+                    </div>
+                    <span className="invest-preview-link" aria-hidden="true">
+                      ↗
+                    </span>
+                  </div>
+                </article>
+              );
+            }
 
-              <div className="invest-tags">
-                {it.tags.map((t) => (
-                  <span key={t}>#{t}</span>
-                ))}
-              </div>
+            return (
+              <article
+                key={it.id}
+                className="invest-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/investment/${it.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ")
+                    navigate(`/investment/${it.id}`);
+                }}
+              >
+                <div className="invest-card-head">
+                  <div className="invest-logo" aria-hidden="true">
+                    {it.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="invest-head-text">
+                    <h3>{it.name}</h3>
+                    <p>{it.oneLiner}</p>
+                  </div>
+                </div>
 
-              <div className="invest-footer">
-                <strong>{it.amount}</strong>
-                <span className="arrow">↗</span>
-              </div>
+                <div className="invest-meta">
+                  <span className="pill">{it.stage}</span>
+                  <span className="pill ghost">{it.location}</span>
+                  <span
+                    className={`pill ${it.status === "투자 완료" ? "success" : "warning"}`}
+                  >
+                    {it.status}
+                  </span>
+                </div>
 
-              <div className="invest-updated">업데이트: {it.updatedAt}</div>
-            </article>
-          ))}
+                <div className="invest-tags">
+                  {it.tags.map((t) => (
+                    <span key={t}>#{t}</span>
+                  ))}
+                </div>
+
+                <div className="invest-footer">
+                  <strong>{it.amount}</strong>
+                  <span className="arrow">↗</span>
+                </div>
+
+                <div className="invest-updated">업데이트: {it.updatedAt}</div>
+              </article>
+            );
+          })}
         </section>
       </main>
 
