@@ -4,10 +4,9 @@ import "../styles/ChatbotWidget.css";
 
 /**
  * 우측 하단 챗봇 위젯
- * - 플로팅 버튼 클릭 -> 패널(모달 느낌) 열림
+ * - 플로팅 버튼 클릭 -> 모달(패널) 열림
  * - Enter: 전송 / Shift+Enter: 줄바꿈
- * - 기본은 로컬 mock 응답 (백엔드 연동은 askBot()만 바꾸면 됨)
- * - 열림/닫힘 "스르륵" 애니메이션 포함 (closing state)
+ * - 기본은 로컬 mock 응답 (백엔드 연동 함수만 바꾸면 됨)
  */
 export default function ChatbotWidget({
   title = "AI 도우미",
@@ -15,10 +14,12 @@ export default function ChatbotWidget({
   initialOpen = false,
 }) {
   const [open, setOpen] = useState(initialOpen);
-  const [closing, setClosing] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+
+  // ✅ 열릴 때 애니메이션용 (opacity/translate)
+  const [mounted, setMounted] = useState(false);
 
   const [messages, setMessages] = useState(() => [
     {
@@ -32,7 +33,6 @@ export default function ChatbotWidget({
 
   const listRef = useRef(null);
   const inputRef = useRef(null);
-  const closeTimerRef = useRef(null);
 
   const quickChips = useMemo(
     () => [
@@ -44,9 +44,10 @@ export default function ChatbotWidget({
     [],
   );
 
-  // 열릴 때 입력창 포커스 + 스크롤 맨 아래
+  // 열릴 때 입력창 포커스 + 스크롤 맨 아래 + 애니메이션 mount
   useEffect(() => {
     if (open && !minimized) {
+      setMounted(true);
       setTimeout(() => {
         inputRef.current?.focus();
         scrollToBottom();
@@ -63,22 +64,13 @@ export default function ChatbotWidget({
   // ESC로 닫기
   useEffect(() => {
     if (!open) return;
-
     const onKeyDown = (e) => {
       if (e.key === "Escape") handleClose();
     };
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, minimized, closing]);
-
-  // 언마운트 시 타이머 정리
-  useEffect(() => {
-    return () => {
-      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-    };
-  }, []);
+  }, [open]);
 
   const scrollToBottom = () => {
     const el = listRef.current;
@@ -88,27 +80,19 @@ export default function ChatbotWidget({
 
   const handleOpen = () => {
     setOpen(true);
-    setClosing(false);
     setMinimized(false);
   };
 
   const handleClose = () => {
-    if (!open || closing) return;
-
-    setClosing(true);
-
-    // CSS exit 애니메이션 시간과 맞추기
-    closeTimerRef.current = setTimeout(() => {
+    // 닫힐 때 애니메이션(스르륵) 위해 잠깐 기다렸다가 open=false
+    setMounted(false);
+    setTimeout(() => {
       setOpen(false);
-      setClosing(false);
       setMinimized(false);
-    }, 180);
+    }, 160);
   };
 
-  const handleMinimize = () => {
-    if (closing) return;
-    setMinimized((v) => !v);
-  };
+  const handleMinimize = () => setMinimized((v) => !v);
 
   const handleChip = (text) => {
     if (!open) handleOpen();
@@ -117,7 +101,7 @@ export default function ChatbotWidget({
 
   const onSubmit = async () => {
     const text = input.trim();
-    if (!text || typing) return;
+    if (!text) return;
     setInput("");
     await sendMessage(text);
   };
@@ -134,7 +118,7 @@ export default function ChatbotWidget({
     setTyping(true);
 
     try {
-      const botText = await askBot(text);
+      const botText = await askBot(text, messages);
       const botMsg = {
         id: cryptoId(),
         role: "assistant",
@@ -165,10 +149,10 @@ export default function ChatbotWidget({
 
   return (
     <>
-      {/* 오버레이 (패널 열렸을 때만) */}
+      {/* 오버레이 */}
       {open && !minimized && (
         <div
-          className={`chatbot-overlay ${closing ? "is-leaving" : ""}`}
+          className={`chatbot-overlay ${mounted ? "is-open" : ""}`}
           onClick={handleClose}
         />
       )}
@@ -189,12 +173,9 @@ export default function ChatbotWidget({
       {/* 패널 */}
       {open && (
         <section
-          className={`chatbot-panel ${minimized ? "minimized" : ""} ${
-            closing ? "is-leaving" : ""
-          }`}
+          className={`chatbot-panel ${minimized ? "minimized" : ""} ${mounted ? "is-open" : ""}`}
           role="dialog"
           aria-label="챗봇"
-          aria-modal="true"
         >
           <header className="chatbot-header">
             <div className="chatbot-header-left">
@@ -309,27 +290,9 @@ function MessageBubble({ role, content }) {
 }
 
 /**
- * ✅ 여기를 나중에 백엔드/AI로 바꾸면 됨.
- * - 현재는 "로컬 mock 답변"을 리턴
+ * ✅ 나중에 백엔드/AI로 바꾸면 됨.
  */
-async function askBot(text) {
-  // ---------------------------
-  // (A) 백엔드 연동 예시 (fetch)
-  // ---------------------------
-  // const base = import.meta.env.VITE_API_BASE_URL; // 예: http://localhost:8080
-  // const res = await fetch(`${base}/api/chat`, {
-  //   method: "POST",
-  //   headers: { "Content-Type": "application/json" },
-  //   credentials: "include", // 쿠키 인증 필요하면
-  //   body: JSON.stringify({ message: text }),
-  // });
-  // if (!res.ok) throw new Error("chat api failed");
-  // const data = await res.json();
-  // return data?.reply ?? "응답이 비어있어요.";
-
-  // ---------------------------
-  // (B) 로컬 mock 답변
-  // ---------------------------
+async function askBot(text /*, history */) {
   await sleep(450);
 
   const lower = text.toLowerCase();
