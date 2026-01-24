@@ -4,7 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/SiteHeader.css";
 
 // ✅ JWT 미사용: 토큰 관련 함수 제거하고 loginId만 지움
-import { clearCurrentUserId } from "../utils/auth";
+// ✅ 팀 코드의 백 연동 방식으로 통일
+import { apiRequest, clearAccessToken } from "../api/client.js";
+import { clearCurrentUserId, clearIsLoggedIn } from "../api/auth.js";
 
 // (선택) 백에 logout API가 있으면 호출해도 되고, 없으면 안 불러도 됨.
 // 지금은 “토큰 없이” 연동이 목표라서 굳이 안 불러도 됨.
@@ -14,7 +16,7 @@ import { clearCurrentUserId } from "../utils/auth";
 const BRAND_INTERVIEW_ROUTES = {
   logo: "/logoconsulting",
   naming: "/nameconsulting",
-  homepage: "/homepageconsulting",
+  homepage: "/conceptconsulting",
   story: "/brandstoryconsulting",
 };
 
@@ -39,11 +41,13 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
     pathname === BRAND_INTERVIEW_ROUTES.logo ||
     pathname === BRAND_INTERVIEW_ROUTES.naming ||
     pathname === BRAND_INTERVIEW_ROUTES.homepage ||
+    pathname === "/homepageconsulting" ||
     pathname === BRAND_INTERVIEW_ROUTES.story ||
     pathname === "/namingconsulting" ||
     pathname === "/brand/naming/interview" ||
     pathname === "/brand/logo/interview" ||
     pathname === "/brand/homepage/interview" ||
+    pathname === "/brand/concept/interview" ||
     pathname === "/brand/story/interview" ||
     pathname.startsWith("/brand/") ||
     pathname.startsWith("/brandconsulting/");
@@ -154,20 +158,22 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
     if (!ok) return;
 
     try {
-      // (선택) 백에 logout API가 있고 꼭 호출하고 싶으면 아래 주석 해제
-      // await authApi.logout();
-    } catch (e) {
-      console.warn("logout API failed:", e);
-    } finally {
-      // ✅ 토큰 대신 loginId 삭제
-      clearCurrentUserId();
-
-      // ✅ 부모에서 추가 정리하고 싶으면(onLogout) 호출
-      if (typeof onLogout === "function") onLogout();
-
-      // ✅ 로그인 화면으로 이동
-      navigate("/login", { replace: true });
+      // ✅ 백에 logout API가 있으면 호출(없어도 에러 무시)
+      await apiRequest("/auth/logout", { method: "POST" });
+    } catch (error) {
+      console.warn("logout API failed:", error);
     }
+
+    // ✅ 토큰/로그인 상태 정리
+    clearAccessToken();
+    clearCurrentUserId();
+    clearIsLoggedIn();
+
+    // ✅ 부모에서 추가 정리하고 싶으면(onLogout) 호출
+    if (typeof onLogout === "function") onLogout();
+
+    // ✅ 로그인 화면으로 이동
+    navigate("/login", { replace: true });
   };
 
   return (
@@ -250,7 +256,7 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
               className="nav-dropdown__item"
               onClick={() => handleBrandItem("homepage")}
             >
-              홈페이지 컨설팅
+              컨셉 컨설팅
             </button>
 
             <button

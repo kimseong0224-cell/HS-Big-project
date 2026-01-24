@@ -59,6 +59,47 @@
   z-index: 1;
 }
 
+/* ✅ Hero(브랜드 컨설팅 소개) */
+.bcHero {
+  width: 100%;
+  max-width: 780px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.bcHero__pill {
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.bcHero__title {
+  margin: 2px 0 0;
+  font-size: 42px;
+  font-weight: 900;
+}
+
+.bcHero__sub {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.bcHero__cta {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 /* ✅ Carousel */
 .hero-carousel {
   position: relative;
@@ -141,11 +182,206 @@
   color: #0f172a;
 }
 
+/* ✅ Intro Card */
+.bcIntroCard {
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  border: 1px solid #e6e9f1;
+  border-radius: 18px;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: 16px;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  margin-bottom: 18px;
+}
+
+.bcIntroCard__left h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.bcPicked {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f2f6ff;
+  border: 1px solid #dbe7ff;
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.bcPicked__note {
+  color: #334155;
+}
+
+.bcIntroCard__left p {
+  margin: 0 0 10px;
+  color: #334155;
+  line-height: 1.75;
+}
+
+.bcBullets {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  line-height: 1.8;
+  font-size: 13px;
+}
+
+.bcIntroCard__right {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  justify-items: stretch;
+}
+
+.bcMiniFlow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+}
+
+.bcMiniFlow__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #4f46e5;
+}
+
+.bcMiniFlow__sep {
+  opacity: 0.6;
+}
+
+.bcIntroCard__actions {
+  display: grid;
+  gap: 10px;
+}
+
+.bcIntroHint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.6;
+}
+
+
+/* ✅ Step Flow (4 steps in a single row with arrows) */
+.bcStepFlow {
+  margin-top: 6px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bcStepCard {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.bcStepArrow {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bcStepArrow__icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #f2f6ff;
+  border: 1px solid #dbe7ff;
+  color: #1766e5;
+  font-weight: 900;
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.06);
+}
+
+@media (max-width: 980px) {
+  .bcStepFlow {
+    overflow-x: auto;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+  }
+
+  .bcStepCard {
+    flex: 0 0 280px;
+    scroll-snap-align: start;
+  }
+
+  .bcStepArrow {
+    flex: 0 0 36px;
+  }
+
+  .bcStepArrow__icon {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+}
+
 /* ✅ Cards */
 .service-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
+}
+
+.bcStepGrid {
+  margin-top: 6px;
+}
+
+.service-card--static {
+  cursor: default;
+}
+
+.service-card--static:hover {
+  transform: none;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.bcStepHint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #475569;
+  background: #f6f7fb;
+  border: 1px dashed #d6dbea;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.bcBottomCTA {
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #e6e9f1;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+}
+
+.bcBottomCTA__hint {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  text-align: center;
+  line-height: 1.6;
 }
 
 .service-card {
@@ -219,6 +455,18 @@
 @media (max-width: 980px) {
   .service-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bcIntroCard {
+    grid-template-columns: 1fr;
+  }
+
+  .bcHero__title {
+    font-size: 34px;
+  }
+
+  .bcHero__sub {
+    font-size: 14px;
   }
 
   .hero-slide strong {

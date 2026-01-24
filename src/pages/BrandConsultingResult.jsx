@@ -175,14 +175,14 @@ const SERVICE_CONFIG = {
   },
 
   homepage: {
-    title: "홈페이지 컨설팅 결과 리포트",
+    title: "컨셉 컨설팅 결과 리포트",
     sub: "입력 내용을 기반으로 요약 리포트를 생성했습니다. (현재는 UI/연결용 더미 리포트)",
     storageKey: "brandInterview_homepage_v1",
     resetKeys: [
       "homepageConsultingInterviewDraft_v1",
       "brandInterview_homepage_v1",
     ],
-    interviewPath: "/homepageconsulting", // ✅ App.jsx와 일치
+    interviewPath: "/conceptconsulting", // ✅ App.jsx와 일치
     requiredKeys: [
       "companyName",
       "industry",

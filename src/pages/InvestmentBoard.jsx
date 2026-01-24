@@ -1,5 +1,5 @@
 // src/pages/InvestmentBoard.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import SiteHeader from "../components/SiteHeader.jsx";
@@ -7,13 +7,11 @@ import SiteFooter from "../components/SiteFooter.jsx";
 
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
-import { getCurrentUserId } from "../utils/auth.js";
-
-const POSTS_STORAGE_KEY = "investmentPosts";
+import { apiRequest } from "../api/client.js";
+import { getCurrentUserId } from "../api/auth.js";
 
 export default function InvestmentBoard({ onLogout }) {
   const navigate = useNavigate();
-  const currentUserId = getCurrentUserId();
 
   // 정책 모달
   const [openType, setOpenType] = useState(null);
@@ -25,53 +23,60 @@ export default function InvestmentBoard({ onLogout }) {
   const [size, setSize] = useState("all");
   const [sort, setSort] = useState("popular"); // popular | newest
 
-  // 더미 데이터 제거: API 연동 전까지 비워둠
-  const items = useMemo(() => [], []);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const currentUserId = getCurrentUserId();
 
-  const savedItems = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(POSTS_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.map((item, index) => ({
-        id: item.id || `local-${index}`,
-        authorId: item.authorId || null,
-        name: item.company || "회사명",
-        oneLiner: item.oneLiner || "",
-        logoImageUrl: item.logoImageUrl || "",
-        tags: Array.isArray(item.hashtags)
-          ? item.hashtags.map((tag) => tag.trim()).filter(Boolean)
-          : [],
-        locations: Array.isArray(item.locations)
-          ? item.locations
-          : item.location
-            ? [item.location]
+  useEffect(() => {
+    let mounted = true;
+    const fetchPosts = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await apiRequest("/brands/posts");
+        const list = Array.isArray(data) ? data : [];
+        const mapped = list.map((item) => ({
+          id: item.postId,
+          name: item.companyName || "회사명",
+          oneLiner: item.shortDescription || "",
+          logoImageUrl: item.logoImageUrl || "",
+          tags: Array.isArray(item.hashtags)
+            ? item.hashtags.map((tag) => tag.trim()).filter(Boolean)
             : [],
-        companySizes: Array.isArray(item.companySizes)
-          ? item.companySizes
-          : item.companySize
-            ? [item.companySize]
-            : [],
-        popularity: 0,
-        updatedAt: item.updatedAt || "2026-01-01",
-        kind: "preview",
-      }));
-    } catch (error) {
-      console.error(error);
-      return [];
-    }
+          authorId:
+            item.userId ??
+            item.authorId ??
+            item.memberId ??
+            item.loginId ??
+            item.createdBy ??
+            null,
+          locations: item.region ? [item.region] : [],
+          companySizes: item.companySize ? [item.companySize] : [],
+          popularity: 0,
+          updatedAt: item.updatedAt
+            ? item.updatedAt.slice(0, 10)
+            : "2026-01-01",
+          kind: "preview",
+        }));
+        if (mounted) setItems(mapped);
+      } catch (err) {
+        console.error(err);
+        if (mounted) setError("게시글 목록을 불러오지 못했습니다.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchPosts();
+    return () => {
+      mounted = false;
+    };
   }, []);
-
-  const combinedItems = useMemo(
-    () => [...savedItems, ...items],
-    [items, savedItems]
-  );
 
   const filtered = useMemo(() => {
     const keyword = q.trim().toLowerCase();
 
-    let out = combinedItems.filter((it) => {
+    let out = items.filter((it) => {
       const hit =
         !keyword ||
         it.name.toLowerCase().includes(keyword) ||
@@ -100,26 +105,15 @@ export default function InvestmentBoard({ onLogout }) {
     }
 
     return out;
-  }, [combinedItems, q, region, size, sort]);
+  }, [items, q, region, size, sort]);
 
   const locationOptions = [
     "all",
-    "서울",
-    "경기",
-    "인천",
-    "부산",
-    "대구",
-    "광주",
-    "대전",
-    "울산",
-    "세종",
-    "강원",
-    "충북",
-    "충남",
-    "전북",
-    "전남",
-    "경북",
-    "경남",
+    "수도권",
+    "강원도",
+    "충남/충북",
+    "경남/경북",
+    "전남/전북",
     "제주",
   ];
 
@@ -230,21 +224,32 @@ export default function InvestmentBoard({ onLogout }) {
         </section>
 
         <section className="invest-grid" aria-label="투자유치 게시글 목록">
+          {loading ? (
+            <div className="invest-detail-empty">불러오는 중...</div>
+          ) : null}
+          {error ? <div className="invest-detail-empty">{error}</div> : null}
+          {!loading && !error && filtered.length === 0 ? (
+            <div className="invest-detail-empty">등록된 게시글이 없습니다.</div>
+          ) : null}
           {filtered.map((it) => {
             if (it.kind === "preview") {
               const logoText = it.name.slice(0, 2).toUpperCase();
               const locationText = [
-                Array.isArray(it.locations) ? it.locations.join(", ") : it.location,
+                Array.isArray(it.locations)
+                  ? it.locations.join(", ")
+                  : it.location,
                 Array.isArray(it.companySizes)
                   ? it.companySizes.join(", ")
                   : it.companySize,
               ]
                 .filter(Boolean)
                 .join(", ");
-              const isOwner =
-                it.authorId && currentUserId && it.authorId === currentUserId;
               const detailPath = `/investment/${it.id}`;
               const editPath = `/investment/edit/${it.id}`;
+              const isOwner =
+                currentUserId &&
+                it.authorId &&
+                String(currentUserId) === String(it.authorId);
               const targetPath = isOwner ? editPath : detailPath;
 
               return (
@@ -283,7 +288,9 @@ export default function InvestmentBoard({ onLogout }) {
                   </div>
                   <div className="invest-preview-bottom">
                     <div className="invest-preview-meta">
-                      <div className="invest-preview-status">{locationText}</div>
+                      <div className="invest-preview-status">
+                        {locationText}
+                      </div>
                       <div className="invest-preview-updated">
                         업데이트: {it.updatedAt}
                       </div>

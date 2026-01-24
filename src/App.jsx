@@ -16,7 +16,7 @@ import DiagnosisResult from "./pages/DiagnosisResult.jsx";
 import BrandConsulting from "./pages/BrandConsulting.jsx";
 import NamingConsultingInterview from "./pages/NamingConsultingInterview.jsx";
 import LogoConsultingInterview from "./pages/LogoConsultingInterview.jsx";
-import HomepageConsultingInterview from "./pages/HomepageConsultingInterview.jsx";
+import ConceptConsultingInterview from "./pages/ConceptConsultingInterview.jsx";
 import BrandStoryConsultingInterview from "./pages/BrandStoryConsultingInterview.jsx";
 import BrandConsultingResult from "./pages/BrandConsultingResult.jsx";
 import BrandAllResults from "./pages/BrandAllResults.jsx";
@@ -33,8 +33,7 @@ import MyPage from "./pages/MyPage.jsx";
 import InvestmentBoard from "./pages/InvestmentBoard.jsx";
 import InvestmentPostCreate from "./pages/InvestmentPostCreate.jsx";
 import InvestmentPostDetail from "./pages/InvestmentPostDetail.jsx";
-
-import AuthTest from "./pages/AuthTest.jsx";
+import InvestmentPostEdit from "./pages/InvestmentPostEdit.jsx";
 
 import ChatbotWidget from "./components/ChatbotWidget.jsx";
 
@@ -80,8 +79,12 @@ export default function App() {
         <Route path="/logoconsulting" element={<LogoConsultingInterview />} />
         <Route path="/nameconsulting" element={<NamingConsultingInterview />} />
         <Route
+          path="/conceptconsulting"
+          element={<ConceptConsultingInterview />}
+        />
+        <Route
           path="/homepageconsulting"
-          element={<HomepageConsultingInterview />}
+          element={<ConceptConsultingInterview />}
         />
 
         {/* ✅ (선택) 별칭(alias)도 유지 */}
@@ -99,9 +102,13 @@ export default function App() {
         />
         <Route
           path="/brand/homepage/interview"
-          element={<HomepageConsultingInterview />}
+          element={<ConceptConsultingInterview />}
         />
 
+        <Route
+          path="/brand/concept/interview"
+          element={<ConceptConsultingInterview />}
+        />
         {/* ✅ 브랜드 스토리 컨설팅 */}
         <Route
           path="/brand/story"
@@ -145,8 +152,7 @@ export default function App() {
         <Route path="/investment" element={<InvestmentBoard />} />
         <Route path="/investment/new" element={<InvestmentPostCreate />} />
         <Route path="/investment/:id" element={<InvestmentPostDetail />} />
-
-        <Route path="/authtest" element={<AuthTest />} />
+        <Route path="/investment/edit/:id" element={<InvestmentPostEdit />} />
 
         {/* ✅ 없는 경로는 메인으로 */}
         <Route path="*" element={<Navigate to="/main" replace />} />

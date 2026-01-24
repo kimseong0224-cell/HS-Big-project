@@ -6,7 +6,7 @@ import SiteHeader from "../components/SiteHeader.jsx";
 import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
-import { getCurrentUserId } from "../utils/auth.js";
+import { apiRequest } from "../api/client.js";
 
 const LOCATION_OPTIONS = [
   "수도권",
@@ -24,8 +24,6 @@ const COMPANY_SIZE_OPTIONS = [
   "대기업",
 ];
 const DRAFT_STORAGE_KEY = "investmentPostDraft";
-const POSTS_STORAGE_KEY = "investmentPosts";
-
 export default function InvestmentPostCreate({ onLogout }) {
   const navigate = useNavigate();
 
@@ -49,10 +47,13 @@ export default function InvestmentPostCreate({ onLogout }) {
   });
   const [logoFileName, setLogoFileName] = useState("");
   const [logoPreview, setLogoPreview] = useState("");
+  const [logoFile, setLogoFile] = useState(null);
   const [draftPromptOpen, setDraftPromptOpen] = useState(false);
   const [draftCandidate, setDraftCandidate] = useState(null);
   const [locationOpen, setLocationOpen] = useState(false);
   const [sizeOpen, setSizeOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const updateField = (key) => (event) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
@@ -74,10 +75,12 @@ export default function InvestmentPostCreate({ onLogout }) {
     if (!file) {
       setLogoFileName("");
       setLogoPreview("");
+      setLogoFile(null);
       return;
     }
 
     setLogoFileName(file.name);
+    setLogoFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setLogoPreview(typeof reader.result === "string" ? reader.result : "");
@@ -126,49 +129,61 @@ export default function InvestmentPostCreate({ onLogout }) {
   const previewLogo = (form.company || "회사").slice(0, 2).toUpperCase();
   const logoSrc = logoPreview;
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     const nextErrors = {
       website: validateUrl(form.website),
     };
     setErrors(nextErrors);
     if (nextErrors.website) return;
+    setSubmitError("");
+    setLoading(true);
 
     const payload = {
-      id: `local-${Date.now()}`,
-      authorId: getCurrentUserId(),
-      company: form.company,
-      oneLiner: form.oneLiner,
-      logoImageUrl: logoPreview,
-      hashtags: form.hashtags,
-      locations: form.locations,
-      detailAddress: form.detailAddress,
-      companySizes: form.companySizes,
-      website: form.website,
-      contactName: form.contactName,
-      contactEmail: form.contactEmail,
-      summary: form.summary,
-      updatedAt: new Date().toISOString().slice(0, 10),
+      companyName: form.company.trim(),
+      shortDescription: form.oneLiner.trim(),
+      region: form.locations[0] || "",
+      contactName: form.contactName.trim(),
+      contactEmail: form.contactEmail.trim(),
+      companyDescription: form.summary.trim(),
+      companySize: form.companySizes[0] || "",
+      hashtag1: form.hashtags[0] || "",
+      hashtag2: form.hashtags[1] || "",
+      hashtag3: form.hashtags[2] || "",
+      hashtag4: form.hashtags[3] || "",
+      hashtag5: form.hashtags[4] || "",
     };
 
+    const formData = new FormData();
+    formData.append(
+      "data",
+      new Blob([JSON.stringify(payload)], { type: "application/json" }),
+    );
+    if (logoFile) formData.append("image", logoFile);
+
     try {
-      const saved = localStorage.getItem(POSTS_STORAGE_KEY);
-      const list = saved ? JSON.parse(saved) : [];
-      const nextList = Array.isArray(list) ? [payload, ...list] : [payload];
-      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(nextList));
+      await apiRequest("/brands/posts", {
+        method: "POST",
+        data: formData,
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
       localStorage.removeItem(DRAFT_STORAGE_KEY);
+      navigate("/investment");
     } catch (error) {
       console.error(error);
+      setSubmitError("게시글 등록에 실패했습니다.");
+    } finally {
+      setLoading(false);
     }
-
-    navigate("/investment");
   };
 
   const handleDraftSave = () => {
     try {
       localStorage.setItem(
         DRAFT_STORAGE_KEY,
-        JSON.stringify({ ...form, logoImageUrl: logoPreview })
+        JSON.stringify({ ...form, logoImageUrl: logoPreview }),
       );
       alert("임시 저장되었습니다.");
     } catch (error) {
@@ -198,6 +213,7 @@ export default function InvestmentPostCreate({ onLogout }) {
     }));
     setLogoPreview(draft?.logoImageUrl || "");
     setLogoFileName("");
+    setLogoFile(null);
   };
 
   const handleDraftLoad = () => {
@@ -255,7 +271,11 @@ export default function InvestmentPostCreate({ onLogout }) {
           임시 저장된 내용이 있습니다. 불러오시겠습니까?
         </p>
         <div className="invest-draft-actions">
-          <button type="button" className="btn ghost" onClick={handleDraftDiscard}>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={handleDraftDiscard}
+          >
             삭제
           </button>
           <button type="button" className="btn" onClick={handleDraftLoad}>
@@ -316,10 +336,16 @@ export default function InvestmentPostCreate({ onLogout }) {
             <div className="invest-form-row">
               <label className="invest-form-label">
                 로고 이미지 업로드
-                <input type="file" accept="image/*" onChange={handleLogoChange} />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoChange}
+                />
               </label>
               {logoFileName ? (
-                <div className="invest-form-helper">선택된 파일: {logoFileName}</div>
+                <div className="invest-form-helper">
+                  선택된 파일: {logoFileName}
+                </div>
               ) : null}
             </div>
 
@@ -402,7 +428,9 @@ export default function InvestmentPostCreate({ onLogout }) {
                   >
                     <div className="invest-location-chips">
                       {form.companySizes.length === 0 ? (
-                        <span className="placeholder">회사 규모를 선택하세요</span>
+                        <span className="placeholder">
+                          회사 규모를 선택하세요
+                        </span>
                       ) : (
                         form.companySizes.map((size) => (
                           <span key={size} className="invest-location-chip">
@@ -519,13 +547,20 @@ export default function InvestmentPostCreate({ onLogout }) {
             </div>
 
             <div className="invest-form-actions">
-              <button type="button" className="btn ghost" onClick={handleDraftSave}>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={handleDraftSave}
+              >
                 임시 저장
               </button>
-              <button type="submit" className="btn primary">
+              <button type="submit" className="btn primary" disabled={loading}>
                 등록하기
               </button>
             </div>
+            {submitError ? (
+              <div className="invest-form-error">{submitError}</div>
+            ) : null}
           </form>
 
           <aside className="invest-create-side">
@@ -556,7 +591,9 @@ export default function InvestmentPostCreate({ onLogout }) {
                 <div className="invest-preview-status">
                   {form.locations.length
                     ? form.locations.join(", ")
-                    : "지역 미선택"}, {form.companySizes.length
+                    : "지역 미선택"}
+                  ,{" "}
+                  {form.companySizes.length
                     ? form.companySizes.join(", ")
                     : "회사 규모 미선택"}
                 </div>
@@ -569,9 +606,15 @@ export default function InvestmentPostCreate({ onLogout }) {
             <div className="invest-guide">
               <h4>작성 가이드</h4>
               <ul>
-                <li>회사명과 한 줄 소개는 투자자가 한눈에 이해할 수 있게 작성해 주세요.</li>
+                <li>
+                  회사명과 한 줄 소개는 투자자가 한눈에 이해할 수 있게 작성해
+                  주세요.
+                </li>
                 <li>태그는 핵심 키워드 위주로 최대 5개까지 입력해 주세요.</li>
-                <li>로고 이미지와 공식 홈페이지를 입력하면 게시글 완성도가 높아집니다.</li>
+                <li>
+                  로고 이미지와 공식 홈페이지를 입력하면 게시글 완성도가
+                  높아집니다.
+                </li>
               </ul>
             </div>
           </aside>
@@ -582,5 +625,3 @@ export default function InvestmentPostCreate({ onLogout }) {
     </div>
   );
 }
-
-

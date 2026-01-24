@@ -1,5 +1,5 @@
 // src/pages/BrandConsulting.jsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import bannerImage from "../Image/banner_image/Banner.png";
@@ -17,11 +17,11 @@ import SiteHeader from "../components/SiteHeader.jsx";
  * [BrandConsulting] 브랜드 컨설팅 허브(랜딩) 페이지
  * ------------------------------------------------------------
  * ✅ 화면 목적
- * - 브랜드 컨설팅의 서비스 목록(로고/네이밍/홈페이지/브랜드 스토리)을 카드로 보여주고
- * - 카드 클릭 시 해당 서비스의 "인터뷰 페이지"로 라우팅
+ * - 브랜드 컨설팅의 "전체 과정"(네이밍 → 컨셉 → 브랜드 스토리 → 로고)을 소개하고
+ * - "브랜드 컨설팅 시작하기" 버튼으로 1단계(네이밍)부터 순차 진행
  *
  * ✅ 현재 프론트 구현 상태
- * - 서비스 목록은 하드코딩(정적 카드)
+ * - 서비스 과정 소개/설명은 정적(하드코딩)
  * - MainPage에서 location.state.section을 받아올 수 있음(선택 메뉴 강조 같은 용도)
  * - 약관/개인정보 모달 UI 포함
  *
@@ -65,66 +65,102 @@ export default function BrandConsulting({ onLogout }) {
   // =========================================================
   const pickedSection = location.state?.section || null;
 
+  // =========================================================
+  // ✅ (프론트 기준) 브랜드 컨설팅 '완료' 여부 판단
+  // - 로그인/유저ID 기반으로 서버에서 판단하는 것이 정석이지만,
+  //   현재는 localStorage에 저장된 4단계 선택 결과를 기준으로 판별
+  // =========================================================
+  const isBrandConsultingCompleted = useMemo(() => {
+    const keys = [
+      "brandInterview_naming_v1",
+      "brandInterview_homepage_v1", // ✅ 컨셉(홈페이지 키를 재사용)
+      "brandInterview_story_v1",
+      "brandInterview_logo_v1",
+    ];
+
+    const read = (k) => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    };
+
+    const hasSelection = (obj) => Boolean(obj?.selectedId || obj?.selected);
+
+    return keys.every((k) => hasSelection(read(k)));
+  }, []);
+
   // labelMap: 섹션 값을 한국어 라벨로 변환(표시용)
   const labelMap = {
     logo: "로고 컨설팅",
     naming: "네이밍 컨설팅",
-    homepage: "홈페이지 컨설팅",
+    homepage: "컨셉 컨설팅",
     story: "브랜드 스토리 컨설팅",
   };
 
-  /**
-   * [goInterview] 카드 클릭 시 서비스별 인터뷰 페이지로 이동
-   * ------------------------------------------------------------
-   * ✅ 지금
-   * - service 값에 따라 routeMap으로 경로 결정 후 navigate
-   * - navigate(to, { state: { service } })
-   *
-   * ✅ BACKEND 연동 시 바뀔 수 있는 지점(중요)
-   * 1) 인증/인가 체크
-   *   - accessToken 없거나 만료면 /login으로 보내기
-   *   - 또는 인터뷰 페이지에서 공통 가드(ProtectedRoute)로 처리
-   *
-   * 2) “새로 시작 vs 이어서 진행”
-   *   - 서버에 draft가 있으면:
-   *     - 여기서 API로 확인 후 모달 띄우고 분기
-   *     - 혹은 인터뷰 페이지가 진입하자마자 draft 조회해서 자동 resume
-   *
-   * 3) 라우팅 설계 개선 가능
-   *   - 지금은 서비스마다 route가 다름
-   *   - 대안: /brand/:service/interview 형태로 통일(유지보수 쉬움)
-   */
-  const goInterview = (service) => {
-    const routeMap = {
-      logo: "/brand/logo/interview",
-      naming: "/brand/naming/interview",
-      homepage: "/brand/homepage/interview",
+  // =========================================================
+  // ✅ 컨설팅 진행 순서(소개용)
+  // - 실제 인터뷰 페이지 이동도 이 순서를 따름
+  // =========================================================
+  const steps = useMemo(
+    () => [
+      {
+        key: "naming",
+        title: "네이밍",
+        sub: "기억되고, 검색되고, 확장 가능한 이름 3안을 제안",
+        img: namecon,
+        tag: "Naming",
+      },
+      {
+        key: "concept",
+        title: "컨셉",
+        sub: "브랜드 방향/톤/차별점을 한 문장으로 정리해주는 컨셉 3안",
+        img: pagecon,
+        tag: "Concept",
+      },
+      {
+        key: "story",
+        title: "브랜드 스토리",
+        sub: "시작 계기 → 문제 → 해결 흐름으로 설득력 있는 스토리 3안",
+        img: pagecon,
+        tag: "Story",
+      },
+      {
+        key: "logo",
+        title: "로고",
+        sub: "컨셉/스토리에 맞춘 로고 방향(워드마크/심볼 등) 3안",
+        img: Logocon,
+        tag: "Logo",
+      },
+    ],
+    [],
+  );
 
-      // ✅ NEW: 브랜드 스토리 인터뷰
-      // App.jsx에 /brandstoryconsulting 라우트가 있어야 함
-      story: "/brandstoryconsulting",
-    };
-
-    const to = routeMap[service];
-    if (!to) return;
-
-    // TODO(BACKEND - 선택):
-    // 1) 로그인 체크 예시(구현 위치는 프로젝트 구조에 따라 다름)
+  // =========================================================
+  // ✅ 브랜드 컨설팅 시작하기
+  // - 1단계(네이밍 인터뷰)부터 순차 진행
+  // =========================================================
+  const handleStart = () => {
+    // TODO(BACKEND - 선택): 로그인 체크 / 이어서 진행 여부 확인
     // const token = localStorage.getItem("accessToken");
-    // if (!token) {
-    //   navigate("/login", { state: { from: "/brandconsulting" } });
-    //   return;
-    // }
+    // if (!token) return navigate("/login", { state: { from: "/brandconsulting" } });
 
-    // TODO(BACKEND - 선택):
-    // 2) draft 존재 여부 확인 후 분기
-    // - 예: GET /brand/draft?service=logo
-    // - 결과에 따라 "resume" 모드로 이동하거나 "start"로 이동
-    // const hasDraft = await api.checkBrandDraft(service);
-    // navigate(to, { state: { service, mode: hasDraft ? "resume" : "start" } });
+    navigate("/brand/naming/interview", { state: { flow: "brand" } });
+  };
 
-    // 현재는 단순 이동
-    navigate(to, { state: { service } });
+  // =========================================================
+  // ✅ 완료한 유저용: 최종 리포트(통합 결과) 바로 보기
+  // - 완료 기준: 4단계 모두 '선택'이 저장되어 있을 때
+  // =========================================================
+  const handleViewFinalReport = () => {
+    if (!isBrandConsultingCompleted) {
+      alert("브랜드 컨설팅 4단계를 모두 완료하면 최종 리포트를 볼 수 있어요.");
+      return;
+    }
+    navigate("/mypage/brand-results");
   };
 
   return (
@@ -166,30 +202,17 @@ export default function BrandConsulting({ onLogout }) {
               className="hero-banner-image"
             />
             <div className="hero-banner-text">
-              <div className="hero-carousel">
-                {/* 캐러셀 슬라이드(정적) */}
-                <div className="hero-slide">
-                  <strong>브랜드 컨설팅</strong>
-                  <span>여러분의 이미지를 표현하세요.</span>
-                </div>
-                <div className="hero-slide">
-                  <strong>로고 컨설팅</strong>
-                  <span>여러분의 개성을 담아보세요.</span>
-                </div>
-                <div className="hero-slide">
-                  <strong>네이밍 컨설팅</strong>
-                  <span>여러분의 첫인상을 그려보세요.</span>
-                </div>
-                <div className="hero-slide">
-                  <strong>홈페이지 컨설팅</strong>
-                  <span>여러분의 얼굴을 만들어보세요.</span>
-                </div>
+              <div className="bcHero">
+                <p className="bcHero__pill">AI Brand Consulting</p>
+                <h1 className="bcHero__title">브랜드 컨설팅</h1>
+                <p className="bcHero__sub">
+                  네이밍 → 컨셉 → 브랜드 스토리 → 로고 순서로 진행되며,
+                  <br />
+                  각 단계마다 <b>AI 컨설팅 3안</b> 중 하나를 선택해 기업 성장을
+                  돕습니다.
+                </p>
 
-                {/* ✅ NEW */}
-                <div className="hero-slide">
-                  <strong>브랜드 스토리 컨설팅</strong>
-                  <span>브랜드의 ‘이야기’를 설계해보세요.</span>
-                </div>
+                {/* 상단(히어로) CTA 버튼은 중복으로 느껴질 수 있어 제거 */}
               </div>
 
               {/* =================================================
@@ -214,96 +237,86 @@ export default function BrandConsulting({ onLogout }) {
           - 현재 하드코딩이지만, 나중에 서버에서 카드 리스트로 교체 가능
          ===================================================== */}
       <main className="brand-content">
-        <h2 className="section-title">컨설팅 시작하기</h2>
+        <h2 className="section-title">컨설팅 과정</h2>
 
-        <div className="service-grid">
-          {/* 로고 */}
-          <article
-            className="service-card"
-            role="button"
-            tabIndex={0}
-            onClick={() => goInterview("logo")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") goInterview("logo");
-            }}
-            // BACKEND(선택):
-            // - 서비스가 비활성화 상태라면 disabled 스타일/클릭 방지 필요
-            // - 서버에서 서비스 활성 여부 받아오면 여기서 분기 가능
-          >
-            <div className="service-image">
-              <img src={Logocon} alt="로고 컨설팅" />
-            </div>
-            <p className="service-tag">Logo Consulting</p>
-            <h3>로고 컨설팅</h3>
-            <div className="service-meta">
-              <span>스타트업의 로고를 만들어 드립니다.</span>
-              <span>↗</span>
-            </div>
-          </article>
+        <div className="bcStepFlow" role="list" aria-label="브랜드 컨설팅 4단계 흐름">
+          {steps.map((s, idx) => (
+            <React.Fragment key={s.key}>
+              <article className="service-card service-card--static bcStepCard" role="listitem">
+                <div className="service-image">
+                  <img src={s.img} alt={`${s.title} 예시 이미지`} />
+                </div>
+                <p className="service-tag">STEP {idx + 1} · {s.tag}</p>
+                <h3>{s.title}</h3>
+                <div className="service-meta">
+                  <span>{s.sub}</span>
+                </div>
+                <div className="bcStepHint">
+                  AI가 3안을 제안 → 1개 선택 → 다음 단계로
+                </div>
+              </article>
 
-          {/* 네이밍 */}
-          <article
-            className="service-card"
-            role="button"
-            tabIndex={0}
-            onClick={() => goInterview("naming")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") goInterview("naming");
-            }}
-          >
-            <div className="service-image">
-              <img src={namecon} alt="네이밍 컨설팅" />
-            </div>
-            <p className="service-tag">Naming Consulting</p>
-            <h3>네이밍 컨설팅</h3>
-            <div className="service-meta">
-              <span>경쟁력있는 이름을 만들어 드립니다.</span>
-              <span>↗</span>
-            </div>
-          </article>
-
-          {/* 홈페이지 */}
-          <article
-            className="service-card"
-            role="button"
-            tabIndex={0}
-            onClick={() => goInterview("homepage")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") goInterview("homepage");
-            }}
-          >
-            <div className="service-image">
-              <img src={pagecon} alt="홈페이지 컨설팅" />
-            </div>
-            <p className="service-tag">Webpage Consulting</p>
-            <h3>홈페이지 컨설팅</h3>
-            <div className="service-meta">
-              <span>사용자 최적의 웹페이지 제안 해드립니다.</span>
-              <span>↗</span>
-            </div>
-          </article>
-
-          {/* ✅ NEW: 브랜드 스토리 */}
-          <article
-            className="service-card"
-            role="button"
-            tabIndex={0}
-            onClick={() => goInterview("story")}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") goInterview("story");
-            }}
-          >
-            <div className="service-image">
-              <img src={pagecon} alt="브랜드 스토리 컨설팅" />
-            </div>
-            <p className="service-tag">Brand Story Consulting</p>
-            <h3>브랜드 스토리 컨설팅</h3>
-            <div className="service-meta">
-              <span>브랜드의 시작·문제·해결을 스토리로 정리합니다.</span>
-              <span>↗</span>
-            </div>
-          </article>
+              {idx < steps.length - 1 ? (
+                <div className="bcStepArrow" aria-hidden="true">
+                  <span className="bcStepArrow__icon">→</span>
+                </div>
+              ) : null}
+            </React.Fragment>
+          ))}
         </div>
+
+        <div className="bcIntroCard">
+          <div className="bcIntroCard__left">
+            <h3>한 번의 흐름으로 브랜드를 정리합니다</h3>
+            {pickedSection ? (
+              <p className="bcPicked">
+                메인에서 선택한 메뉴: <b>{labelMap[pickedSection] ?? pickedSection}</b>
+                <span className="bcPicked__note"> · 브랜드 컨설팅은 4단계 순차 진행입니다.</span>
+              </p>
+            ) : null}
+            <p>
+              브랜드 컨설팅은 <b>네이밍 → 컨셉 → 브랜드 스토리 → 로고</b> 순서로
+              진행됩니다. 각 단계에서 AI가 <b>3가지 컨설팅 결과</b>를 제안하고,
+              사용자가 1개를 선택하면 다음 단계로 이어져 결과가 점점 구체화됩니다.
+            </p>
+            <ul className="bcBullets">
+              <li>각 단계는 인터뷰 기반으로 진행되어 결과의 근거가 명확합니다.</li>
+              <li>선택한 결과는 다음 단계의 입력으로 사용되어 일관성이 유지됩니다.</li>
+              <li>마지막에는 4단계 결과를 한 번에 모아 리포트로 확인할 수 있습니다.</li>
+            </ul>
+          </div>
+
+          <div className="bcIntroCard__right">
+            <div className="bcMiniFlow">
+              <span className="bcMiniFlow__dot" />
+              <span>4단계 진행</span>
+              <span className="bcMiniFlow__sep">·</span>
+              <span>단계별 3안 제안</span>
+            </div>
+            <div className="bcIntroCard__actions">
+              <button type="button" className="btn primary" onClick={handleStart}>
+                브랜드 컨설팅 시작하기
+              </button>
+
+              <button
+                type="button"
+                className={`btn ghost ${isBrandConsultingCompleted ? "" : "disabled"}`}
+                onClick={handleViewFinalReport}
+                disabled={!isBrandConsultingCompleted}
+              >
+                완료한 브랜드 리포트 보기
+              </button>
+
+              {!isBrandConsultingCompleted ? (
+                <p className="bcIntroHint">* 4단계를 완료한 경우에만 열 수 있어요.</p>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <p className="bcBottomCTA__hint" style={{ marginTop: 18 }}>
+          * 시작 후에는 각 인터뷰 화면 상단의 “전체 단계 표시”에서 진행 상황을 확인할 수 있어요.
+        </p>
       </main>
 
       {/* ✅ 공통 푸터 (약관 모달 열기 콜백 전달) */}

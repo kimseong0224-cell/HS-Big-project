@@ -27,7 +27,8 @@ import "./styles/SiteFooter.css";
 
 import "./styles/NamingConsultingInterview.css";
 import "./styles/LogoConsultingInterview.css";
-import "./styles/HomepageConsultingInterview.css";
+import "./styles/ConceptConsultingInterview.css";
+import "./styles/ConsultingFlowPanel.css";
 
 import "./styles/Promotion.css";
 

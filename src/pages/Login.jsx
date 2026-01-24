@@ -12,8 +12,9 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 import EasyLoginModal from "../components/EasyLoginModal.jsx";
 
-import { authApi } from "../api"; // ✅ src/api/index.js에서 export됨
-import { setCurrentUserId } from "../utils/auth"; // ✅ JWT 없이도 로그인 상태 저장용
+// ✅ 팀 코드의 백 연동 방식으로 통일
+import { apiRequest, setAccessToken } from "../api/client.js";
+import { setCurrentUserId, setIsLoggedIn } from "../api/auth.js";
 
 export default function LoginApp() {
   const navigate = useNavigate();
@@ -45,15 +46,31 @@ export default function LoginApp() {
 
     setIsLoading(true);
     try {
-      // ✅ 백엔드 로그인 호출
-      await authApi.login({ loginId, password: pw });
+      // ✅ 백엔드 로그인
+      const data = await apiRequest("/auth/login", {
+        method: "POST",
+        data: {
+          loginId,
+          password: pw,
+        },
+      });
 
-      // ✅ JWT 안 써도 “로그인 상태”는 필요하니 아이디 저장
-      setCurrentUserId(loginId);
+      // ✅ 토큰 저장(응답 키가 다를 가능성 대비)
+      const token =
+        data?.accessToken ||
+        data?.token ||
+        data?.access_token ||
+        data?.jwt ||
+        data?.jwtToken;
+      if (token) setAccessToken(token);
+
+      // ✅ 로그인 사용자 식별자 저장
+      setCurrentUserId(data?.userId || data?.loginId || loginId);
+      setIsLoggedIn(true);
 
       navigate("/main");
     } catch (err) {
-      setErrorMsg(err.userMessage || "로그인에 실패했습니다.");
+      setErrorMsg(err?.userMessage || "로그인에 실패했습니다.");
     } finally {
       setIsLoading(false);
     }

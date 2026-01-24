@@ -1,13 +1,12 @@
 // src/pages/InvestmentPostDetail.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import SiteHeader from "../components/SiteHeader.jsx";
 import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
-
-const POSTS_STORAGE_KEY = "investmentPosts";
+import { apiRequest } from "../api/client.js";
 
 export default function InvestmentPostDetail({ onLogout }) {
   const navigate = useNavigate();
@@ -16,17 +15,42 @@ export default function InvestmentPostDetail({ onLogout }) {
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  const item = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(POSTS_STORAGE_KEY);
-      if (!raw) return null;
-      const list = JSON.parse(raw);
-      if (!Array.isArray(list)) return null;
-      return list.find((entry) => entry.id === id) || null;
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
+  const [item, setItem] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchPost = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await apiRequest(`/brands/posts/${id}`);
+        const mapped = {
+          id: data?.postId,
+          company: data?.companyName || "",
+          oneLiner: data?.shortDescription || "",
+          logoImageUrl: data?.logoImageUrl || "",
+          locations: data?.region ? [data.region] : [],
+          companySizes: data?.companySize ? [data.companySize] : [],
+          hashtags: Array.isArray(data?.hashtags) ? data.hashtags : [],
+          contactName: data?.contactName || "",
+          contactEmail: data?.contactEmail || "",
+          summary: data?.companyDescription || "",
+          updatedAt: data?.updatedAt ? data.updatedAt.slice(0, 10) : "",
+        };
+        if (mounted) setItem(mapped);
+      } catch (err) {
+        console.error(err);
+        if (mounted) setError("게시글을 불러오지 못했습니다.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    fetchPost();
+    return () => {
+      mounted = false;
+    };
   }, [id]);
 
   const tags = useMemo(() => {
@@ -50,8 +74,31 @@ export default function InvestmentPostDetail({ onLogout }) {
   const locationText = Array.isArray(item?.locations)
     ? item.locations.join(", ")
     : item?.location || "-";
-  const detailAddress = item?.detailAddress || "-";
+  const detailAddress = "-";
 
+  if (loading) {
+    return (
+      <div className="invest-detail-page">
+        <SiteHeader onLogout={onLogout} />
+        <main className="invest-detail-main">
+          <div className="invest-detail-empty">불러오는 중...</div>
+        </main>
+        <SiteFooter onOpenPolicy={setOpenType} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="invest-detail-page">
+        <SiteHeader onLogout={onLogout} />
+        <main className="invest-detail-main">
+          <div className="invest-detail-empty">{error}</div>
+        </main>
+        <SiteFooter onOpenPolicy={setOpenType} />
+      </div>
+    );
+  }
 
   if (!item) {
     return (
@@ -169,17 +216,7 @@ export default function InvestmentPostDetail({ onLogout }) {
                 </li>
                 <li className="invest-detail-fields-group">
                   <strong>홈페이지</strong>
-                  {item.website ? (
-                    <a
-                      href={item.website}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {item.website}
-                    </a>
-                  ) : (
-                    <span>-</span>
-                  )}
+                  <span>-</span>
                 </li>
                 <li>
                   <strong>담당자</strong>

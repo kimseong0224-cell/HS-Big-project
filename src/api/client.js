@@ -1,17 +1,59 @@
-// src/api/client.js
 import axios from "axios";
 
-const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
+// ✅ 기본값: 로컬 백엔드(환경변수 없을 때)
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8080"
+).replace(/\/+$/, "");
+
+const TOKEN_KEY = "accessToken";
+
+export const getAccessToken = () => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setAccessToken = (token) => {
+  if (!token) return;
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    return;
+  }
+};
+
+export const clearAccessToken = () => {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    return;
+  }
+};
+
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL || undefined,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000,
-  // withCredentials: true, // ✅ 백이 "쿠키 세션" 방식이면 true로(지금은 JWT 미사용이니 보통 false)
 });
 
-// (선택) 에러 메시지 통일해서 쓰고 싶으면 인터셉터로 정리 가능
-client.interceptors.response.use(
+// ✅ 요청에 토큰 자동 첨부
+apiClient.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token && !config.headers?.Authorization) {
+    config.headers = {
+      ...config.headers,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+  return config;
+});
+
+// ✅ 에러 메시지 통일
+apiClient.interceptors.response.use(
   (res) => res,
   (error) => {
     const msg =
@@ -24,4 +66,10 @@ client.interceptors.response.use(
   },
 );
 
-export default client;
+export const apiRequest = async (path, options = {}) => {
+  const response = await apiClient.request({
+    url: path,
+    ...options,
+  });
+  return response.data;
+};

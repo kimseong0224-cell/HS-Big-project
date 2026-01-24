@@ -73,9 +73,9 @@ export default function MyPage({ onLogout }) {
       },
       {
         key: "homepage",
-        title: "홈페이지 컨설팅",
+        title: "컨셉 컨설팅",
         storageKeys: ["brandInterview_homepage_v1"],
-        goPath: "/homepageconsulting",
+        goPath: "/conceptconsulting",
       },
       {
         key: "story",

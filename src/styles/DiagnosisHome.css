@@ -149,9 +149,9 @@
 
 /* Main */
 .diagHome__main {
-  max-width: 1600px; /* 더 넓게 */
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 42px 32px 72px; /* 메인 main-content랑 완전히 통일 */
+  padding: 28px 32px 72px;
 }
 
 /* .diagHome__main {

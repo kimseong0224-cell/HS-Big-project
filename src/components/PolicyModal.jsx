@@ -61,6 +61,6 @@ export default function PolicyModal({ open, title, onClose, children }) {
         <div className="policyModal__body">{children}</div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

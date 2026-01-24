@@ -109,10 +109,10 @@ export default function BrandAllResults({ onLogout }) {
       },
       {
         key: "homepage",
-        title: "홈페이지 컨설팅",
+        title: "컨셉 컨설팅",
         desc: "사이트 목적/CTA/섹션 기반 구성 요약",
         storageKeys: ["brandInterview_homepage_v1"],
-        interviewPath: "/homepageconsulting",
+        interviewPath: "/conceptconsulting",
         summary: [
           "companyName",
           "industry",
@@ -190,7 +190,7 @@ export default function BrandAllResults({ onLogout }) {
             <div>
               <h1 className="brandAll-title">브랜드 컨설팅 통합 결과 리포트</h1>
               <p className="brandAll-sub">
-                로고 · 네이밍 · 홈페이지 · 브랜드 스토리 결과를 한곳에서
+                로고 · 네이밍 · 컨셉 · 브랜드 스토리 결과를 한곳에서
                 확인합니다. (저장된 localStorage 기준)
               </p>
             </div>

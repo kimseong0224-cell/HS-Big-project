@@ -72,7 +72,9 @@
   border-radius: 10px;
   display: grid;
   place-items: center;
-  transition: background 0.15s ease, transform 0.05s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.05s ease;
 }
 
 .policyModal__close:hover {
