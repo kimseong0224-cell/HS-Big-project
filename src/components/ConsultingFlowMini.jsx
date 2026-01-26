@@ -1,80 +1,56 @@
-// src/components/ConsultingFlowMini.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import "../styles/ConsultingFlowMini.css";
 
 /**
- * ✅ 오른쪽 스티키 사이드바에 들어가는 '전체 4단계' 미니 표시
- * - 인터뷰를 진행하면서(스크롤 중에도) 내가 어느 단계인지 바로 확인 가능
+ * ✅ 사이드 카드용 경고 알림 컴포넌트
+ * - 상단 단계 카드(ConsultingFlowPanel)에서 "이전 단계 미완료"로 이동이 막힐 때
+ *   window CustomEvent("consultingFlow:guard")를 받아 경고 메시지만 보여줍니다.
+ * - 사이드 카드에 단계 아이콘/미니 스텝/이전·다음 버튼은 노출하지 않습니다.
  */
-
-const STEPS = [
-  { key: "naming", label: "네이밍", legacyKey: "brandInterview_naming_v1" },
-  { key: "concept", label: "컨셉", legacyKey: "brandInterview_homepage_v1" },
-  { key: "story", label: "스토리", legacyKey: "brandInterview_story_v1" },
-  { key: "logo", label: "로고", legacyKey: "brandInterview_logo_v1" },
-];
-
-function safeParse(raw) {
-  try {
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function isDone(legacyKey) {
-  const parsed = safeParse(localStorage.getItem(legacyKey));
-  if (!parsed) return false;
-  if (parsed.selected) return true;
-  if (parsed.selectedId) return true;
-  return false;
-}
-
-export default function ConsultingFlowMini({ activeKey = "naming" }) {
-  const activeIndex = useMemo(() => {
-    const idx = STEPS.findIndex((s) => s.key === activeKey);
-    return idx >= 0 ? idx : 0;
-  }, [activeKey]);
-
-  const [doneMap, setDoneMap] = useState(() => {
-    const init = {};
-    STEPS.forEach((s) => (init[s.key] = false));
-    return init;
-  });
+export default function ConsultingFlowMini() {
+  const [guardMsg, setGuardMsg] = useState("");
+  const guardRef = useRef(null);
 
   useEffect(() => {
-    try {
-      const next = {};
-      STEPS.forEach((s) => {
-        next[s.key] = isDone(s.legacyKey);
+    const onGuard = (e) => {
+      const msg = e?.detail?.message;
+      if (!msg) return;
+      setGuardMsg(msg);
+
+      // 사이드 카드 영역에서 바로 보이게 스크롤(상황에 따라 자연스럽게)
+      requestAnimationFrame(() => {
+        guardRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
       });
-      setDoneMap(next);
-    } catch {
-      // ignore
-    }
-  }, [activeKey]);
+    };
+
+    window.addEventListener("consultingFlow:guard", onGuard);
+    return () => window.removeEventListener("consultingFlow:guard", onGuard);
+  }, []);
+
+  // 자동 사라짐(선호에 따라 시간 조정 가능)
+  useEffect(() => {
+    if (!guardMsg) return;
+    const t = setTimeout(() => setGuardMsg(""), 4500);
+    return () => clearTimeout(t);
+  }, [guardMsg]);
+
+  if (!guardMsg) return null;
 
   return (
-    <div className="flowMini" aria-label="전체 컨설팅 단계">
-      <div className="flowMini__head">
-        <span className="flowMini__title">전체 단계</span>
-        <span className="flowMini__meta">
-          {activeIndex + 1}/{STEPS.length}
-        </span>
+    <div
+      ref={guardRef}
+      className="flowMiniGuard"
+      role="alert"
+      aria-live="polite"
+    >
+      <div className="flowMiniGuard__title">
+        <span className="flowMiniGuard__dot" />
+        이전 단계가 완료되지 않았어요
       </div>
-      <div className="flowMini__row">
-        {STEPS.map((s, i) => {
-          const isActive = i === activeIndex;
-          const done = doneMap[s.key] || i < activeIndex;
-          const cls = isActive ? "active" : done ? "done" : "todo";
-          return (
-            <span key={s.key} className={`flowMini__pill ${cls}`}
-              title={done ? "완료" : isActive ? "진행 중" : "대기"}
-            >
-              {done && !isActive ? "✓" : i + 1}. {s.label}
-            </span>
-          );
-        })}
-      </div>
+      <div className="flowMiniGuard__text">{guardMsg}</div>
     </div>
   );
 }

@@ -54,9 +54,11 @@ export default function BrandAllResults({ onLogout }) {
       {
         key: "concept",
         title: "컨셉",
-        desc: "사이트 목적/CTA/섹션 기반 컨셉 3안 + 선택",
-        legacyKey: "brandInterview_homepage_v1",
-        draftKey: "conceptInterviewDraft_homepage_v6",
+        desc: "브랜드 톤/가치/아키타입 기반 컨셉 3안 + 선택",
+        legacyKey: "brandInterview_concept_v1",
+        legacyFallbackKey: "brandInterview_homepage_v1",
+        draftKey: "conceptConsultingInterviewDraft_v1",
+        draftFallbackKey: "conceptInterviewDraft_homepage_v6",
         interviewRoute: "/brand/concept/interview",
         resultRoute: "/brand/result?service=homepage",
       },
@@ -66,7 +68,7 @@ export default function BrandAllResults({ onLogout }) {
         desc: "Origin/Problem/Solution 기반 스토리 3안 + 선택",
         legacyKey: "brandInterview_story_v1",
         draftKey: "brandStoryConsultingInterviewDraft_v1",
-        interviewRoute: "/brand/story",
+        interviewRoute: "/brand/story/interview",
         resultRoute: "/brand/result?service=story",
       },
       {
@@ -84,8 +86,8 @@ export default function BrandAllResults({ onLogout }) {
 
   const cards = useMemo(() => {
     return SERVICES.map((s) => {
-      const legacy = safeParse(localStorage.getItem(s.legacyKey));
-      const draft = safeParse(localStorage.getItem(s.draftKey));
+      const legacy = readStorageWithFallback(s.legacyKey, s.legacyFallbackKey);
+      const draft = readStorageWithFallback(s.draftKey, s.draftFallbackKey);
 
       const selectedId = legacy?.selectedId || legacy?.selected?.id;
 

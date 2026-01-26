@@ -23,15 +23,6 @@ function safeText(v, fallback = "") {
   return s ? s : fallback;
 }
 
-function pickKeywords(text, max = 8) {
-  const raw = String(text || "")
-    .split(/[,\n\t]/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const uniq = Array.from(new Set(raw));
-  return uniq.slice(0, max);
-}
-
 function stageLabel(v) {
   const s = String(v || "")
     .trim()
@@ -66,98 +57,228 @@ function readDiagnosisForm() {
   return null;
 }
 
+function isFilled(v) {
+  if (Array.isArray(v)) return v.length > 0;
+  return Boolean(String(v ?? "").trim());
+}
+
+/** ✅ multiple 선택용 칩 UI */
+function MultiChips({ value, options, onChange, max = null }) {
+  const current = Array.isArray(value) ? value : [];
+
+  const toggle = (opt) => {
+    const exists = current.includes(opt);
+    let next = exists ? current.filter((x) => x !== opt) : [...current, opt];
+
+    if (typeof max === "number" && max > 0 && next.length > max) {
+      next = next.slice(0, max);
+    }
+    onChange(next);
+  };
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((opt) => {
+        const active = current.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            aria-pressed={active}
+            onClick={() => toggle(opt)}
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: active ? "rgba(99,102,241,0.12)" : "rgba(0,0,0,0.04)",
+              border: active
+                ? "1px solid rgba(99,102,241,0.25)"
+                : "1px solid rgba(0,0,0,0.10)",
+              color: "rgba(0,0,0,0.78)",
+              cursor: "pointer",
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const STORY_PLOT_OPTIONS = ["문제 해결형", "비전 제시형", "탄생 신화형"];
+const STORY_EMOTION_OPTIONS = ["안도감", "호기심"];
+
 function generateStoryCandidates(form, seed = 0) {
   const companyName = safeText(form?.companyName, "우리");
   const industry = safeText(form?.industry, "분야");
   const stage = stageLabel(form?.stage);
   const target = safeText(form?.targetCustomer, "고객");
   const oneLine = safeText(form?.oneLine, "");
-  const core = safeText(form?.brandCore, "핵심 가치");
-  const origin = safeText(form?.originStory, "");
-  const problem = safeText(form?.problemStory, "문제");
-  const solution = safeText(form?.solutionStory, "해결");
-  const tone = safeText(form?.tone, "담백하고 신뢰감");
-  const proof = safeText(form?.proof, "");
-  const goal = safeText(form?.goal, "브랜드 신뢰를 높이는 스토리");
+
+  const founding = safeText(form?.founding_story, "");
+  const transformation = safeText(form?.customer_transformation, "");
+  const mission = safeText(form?.brand_mission, "");
+  const conflict = safeText(form?.customer_conflict, "");
+  const ultimate = safeText(form?.ultimate_goal, "");
+
+  const plots = Array.isArray(form?.story_plot) ? form.story_plot : [];
+  const emotions = Array.isArray(form?.story_emotion) ? form.story_emotion : [];
 
   const pick = (arr, idx) => arr[(idx + seed) % arr.length];
 
-  const structures = [
-    { label: "문제→전환→해결", order: ["problem", "turning", "solution"] },
-    { label: "창업 계기 중심", order: ["origin", "problem", "solution"] },
-    { label: "고객 여정 중심", order: ["problem", "customer", "solution"] },
-  ];
   const hooks = [
-    "왜 이렇게 복잡해야 할까요?",
-    "시작은 언제나 막막합니다.",
-    "좋은 결정은 좋은 정보에서 시작됩니다.",
-    "계획은 많은데 실행이 어렵습니다.",
+    "왜 좋은 선택이 늘 어려울까요?",
+    "고객의 하루는 늘 방해물로 가득합니다.",
+    "우리는 ‘당연한 불편’을 당연하게 넘기지 않았습니다.",
+    "작은 결핍이 큰 포기로 이어지는 순간이 있습니다.",
   ];
+
   const endings = [
-    "우리는 오늘도 실행 가능한 다음 한 걸음을 설계합니다.",
-    "우리는 당신의 성장을 함께 설계하는 파트너입니다.",
-    "우리는 더 단순하고 더 확실한 선택을 만들겠습니다.",
+    "우리는 오늘도 고객이 더 쉽게, 더 확신 있게 앞으로 나아가도록 돕습니다.",
+    "우리는 고객이 멈추는 지점에서 다시 움직이게 만드는 브랜드가 되겠습니다.",
+    "우리는 더 나은 내일을 ‘실행 가능한 이야기’로 만들겠습니다.",
   ];
 
-  const mk = (type, title, structure) => {
-    const hook = pick(hooks, type);
-    const end = pick(endings, type);
+  const baseMeta = () => ({
+    oneLiner: oneLine
+      ? `“${oneLine}”`
+      : `“${ultimate || mission || "브랜드 스토리"}”`,
+    meta: `${industry} · ${stage} · 타깃: ${target}`,
+    emotions: emotions.length ? emotions : ["안도감"],
+  });
 
-    const turning = `그래서 ${companyName}는 ${industry}에서 ${target}을 위해, ‘${core}’를 기준으로 다시 설계하기로 했습니다.`;
-    const customer = `고객은 ${industry}의 여정에서 ‘${problem}’ 때문에 멈추고, 우리는 그 지점을 ‘${solution}’로 연결합니다.`;
+  const buildStory = (plotType) => {
+    const hook = pick(hooks, 0);
+    const end = pick(endings, 1);
 
-    const blocks = {
-      origin: origin
-        ? `시작은 아주 개인적인 불편함에서 출발했습니다. ${origin}`
-        : `시작은 작은 질문에서 출발했습니다. ‘${hook}’`,
-      problem: `현실에서 ${target}은(는) ${problem} 때문에 중요한 순간에 시간을 잃습니다.`,
-      turning,
-      customer,
-      solution: `그리고 우리는 ${solution}을 통해, ${target}이(가) 더 빠르게 결정하고 더 꾸준히 실행하도록 돕습니다.`,
-    };
+    const pFounding = founding
+      ? `【창업 계기】\n${founding}`
+      : `【창업 계기】\n시작은 작은 질문에서 출발했습니다. “${hook}”`;
 
-    const body = structure.order
-      .map((k) => blocks[k])
-      .filter(Boolean)
-      .join("\n\n");
+    const pConflict = conflict
+      ? `【고객의 결핍/방해물】\n${conflict}`
+      : `【고객의 결핍/방해물】\n${target}은(는) 중요한 순간에 ‘정보/시간/확신’의 결핍으로 흔들립니다.`;
 
+    const pTransform = transformation
+      ? `【사용 전/후 변화】\n${transformation}`
+      : `【사용 전/후 변화】\n사용 전에는 고민이 길어지고 실행이 끊기지만, 사용 후에는 선택이 빨라지고 실행이 이어집니다.`;
+
+    const pMission = mission
+      ? `【미션】\n${mission}`
+      : `【미션】\n우리는 수익을 넘어, 고객이 더 나은 결정을 내리고 지속적으로 성장하도록 돕고자 합니다.`;
+
+    const pUltimate = ultimate
+      ? `【궁극적 목표】\n${ultimate}`
+      : `【궁극적 목표】\n우리는 ‘더 쉽고 더 신뢰할 수 있는 선택’이 당연한 세상을 만들고자 합니다.`;
+
+    const emoLine = `【자극하고 싶은 감정】 ${(emotions.length
+      ? emotions
+      : ["안도감"]
+    ).join(" · ")}`;
+
+    // 플롯별 구조 차등
+    if (plotType === "문제 해결형") {
+      return {
+        plot: plotType,
+        story: [
+          `【훅】 ${hook}`,
+          pConflict,
+          pFounding,
+          pTransform,
+          pMission,
+          pUltimate,
+          emoLine,
+          `【마무리】 ${end}`,
+        ].join("\n\n"),
+        ending: end,
+      };
+    }
+
+    if (plotType === "비전 제시형") {
+      return {
+        plot: plotType,
+        story: [
+          `【훅】 우리가 꿈꾸는 미래는 분명합니다.`,
+          pUltimate,
+          pMission,
+          pConflict,
+          pTransform,
+          pFounding,
+          emoLine,
+          `【마무리】 ${end}`,
+        ].join("\n\n"),
+        ending: end,
+      };
+    }
+
+    // 탄생 신화형
     return {
-      id: title,
-      name: title,
-      oneLiner: oneLine ? `“${oneLine}”` : `“${goal}”`,
-      tone: `${tone} · ${structure.label}`,
-      story: body,
-      proof: proof
-        ? `근거/신뢰 요소: ${proof}`
-        : "근거/신뢰 요소: (선택) 성과/지표/사례를 추가하면 설득력이 커집니다.",
+      plot: plotType,
+      story: [
+        `【훅】 이 이야기는 ‘왜 시작했는가’에서 시작합니다.`,
+        pFounding,
+        pMission,
+        pConflict,
+        pTransform,
+        pUltimate,
+        emoLine,
+        `【마무리】 ${end}`,
+      ].join("\n\n"),
       ending: end,
-      keywords: Array.from(
-        new Set([
-          industry,
-          stage,
-          "신뢰",
-          "실행",
-          ...pickKeywords(form?.keywords || "", 6),
-        ]),
-      ).slice(0, 10),
     };
   };
 
-  const s = pick(structures, 0);
+  const plotPool = plots.length ? plots : STORY_PLOT_OPTIONS;
+
+  const p1 = pick(plotPool, 0);
+  const p2 = pick(plotPool, 1);
+  const p3 = pick(plotPool, 2);
+
+  const mk = (id, name, plotType, variantSeed) => {
+    const { plot, story, ending } = buildStory(plotType);
+    const meta = baseMeta();
+
+    const keywords = Array.from(
+      new Set([
+        industry,
+        stage,
+        plot,
+        ...(meta.emotions || []),
+        "스토리",
+        "브랜드",
+      ]),
+    ).slice(0, 10);
+
+    // 약간 변주: 훅/엔딩 시드 반영
+    const altHook = pick(hooks, variantSeed);
+    const altEnd = pick(endings, variantSeed);
+
+    const story2 =
+      variantSeed === 0
+        ? story
+        : story.replace(/【훅】.*\n?/m, (m) =>
+            m.replace(/【훅】.*/, `【훅】 ${altHook}`),
+          );
+
+    return {
+      id,
+      name,
+      oneLiner: meta.oneLiner,
+      meta: meta.meta,
+      plot,
+      emotions: meta.emotions,
+      story: story2,
+      ending: variantSeed === 0 ? ending : altEnd,
+      keywords,
+    };
+  };
 
   return [
-    mk(0, "A · 담백한 문제해결형", {
-      ...s,
-      order: ["problem", "turning", "solution"],
-    }),
-    mk(1, "B · 창업 계기/창업자형", {
-      ...s,
-      order: ["origin", "problem", "solution"],
-    }),
-    mk(2, "C · 고객 여정/감정형", {
-      ...s,
-      order: ["problem", "customer", "solution"],
-    }),
+    mk("story_1", "A · 문제 해결형", p1, 0),
+    mk("story_2", "B · 비전 제시형", p2, 1),
+    mk("story_3", "C · 탄생 신화형", p3, 2),
   ];
 }
 
@@ -170,15 +291,16 @@ const INITIAL_FORM = {
   oneLine: "",
   targetCustomer: "",
 
-  // ✅ 스토리 컨설팅 질문(편집 O)
-  brandCore: "",
-  originStory: "",
-  problemStory: "",
-  solutionStory: "",
-  tone: "",
-  proof: "",
-  goal: "",
-  keywords: "",
+  // ✅ Step 4. 브랜드 스토리 (편집 O)
+  founding_story: "", // long
+  customer_transformation: "", // long
+  brand_mission: "", // long
+  story_plot: [], // multiple
+  customer_conflict: "", // long
+  story_emotion: [], // multiple
+  ultimate_goal: "", // long
+
+  // 선택 메모
   notes: "",
 };
 
@@ -205,29 +327,40 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
 
   // 섹션 ref
   const refBasic = useRef(null);
-  const refCore = useRef(null);
-  const refStory = useRef(null);
-  const refGoal = useRef(null);
+  const refMaterial = useRef(null);
+  const refStyle = useRef(null);
+  const refVision = useRef(null);
+  const refNotes = useRef(null);
 
   const sections = useMemo(
     () => [
       { id: "basic", label: "기본 정보", ref: refBasic },
-      { id: "core", label: "핵심/톤", ref: refCore },
-      { id: "story", label: "스토리 재료", ref: refStory },
-      { id: "goal", label: "목표/요청", ref: refGoal },
+      { id: "material", label: "스토리 재료", ref: refMaterial },
+      { id: "style", label: "플롯/감정", ref: refStyle },
+      { id: "vision", label: "미션/목표", ref: refVision },
+      { id: "notes", label: "추가 요청", ref: refNotes },
     ],
     [],
   );
 
-  // ✅ 필수 항목(스토리에서 사용자가 입력해야 하는 것만)
+  // ✅ 필수 항목(요청한 Step4 질문 기준)
   const requiredKeys = useMemo(
-    () => ["brandCore", "problemStory", "solutionStory", "goal"],
+    () => [
+      "founding_story",
+      "customer_transformation",
+      "brand_mission",
+      "story_plot",
+      "customer_conflict",
+      "story_emotion",
+      "ultimate_goal",
+    ],
     [],
   );
+
   const requiredStatus = useMemo(() => {
     const status = {};
     requiredKeys.forEach((k) => {
-      status[k] = Boolean(String(form?.[k] || "").trim());
+      status[k] = isFilled(form?.[k]);
     });
     return status;
   }, [form, requiredKeys]);
@@ -259,14 +392,52 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
     refResult.current.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // ✅ draft 로드
+  // ✅ draft 로드 (+ 간단한 구버전 필드 마이그레이션)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (parsed?.form && typeof parsed.form === "object") {
-        setForm((prev) => ({ ...prev, ...parsed.form }));
+      const loaded =
+        parsed?.form && typeof parsed.form === "object" ? parsed.form : null;
+      if (loaded) {
+        setForm((prev) => {
+          const next = { ...prev, ...loaded };
+
+          // 구버전 키가 남아있다면, 빈 값일 때만 최소 매핑
+          if (
+            !String(next.founding_story || "").trim() &&
+            String(loaded.originStory || "").trim()
+          ) {
+            next.founding_story = loaded.originStory;
+          }
+          if (
+            !String(next.customer_conflict || "").trim() &&
+            String(loaded.problemStory || "").trim()
+          ) {
+            next.customer_conflict = loaded.problemStory;
+          }
+          if (
+            !String(next.customer_transformation || "").trim() &&
+            String(loaded.solutionStory || "").trim()
+          ) {
+            next.customer_transformation = loaded.solutionStory;
+          }
+          if (
+            !String(next.ultimate_goal || "").trim() &&
+            String(loaded.goal || "").trim()
+          ) {
+            next.ultimate_goal = loaded.goal;
+          }
+          if (
+            !String(next.brand_mission || "").trim() &&
+            String(loaded.brandCore || "").trim()
+          ) {
+            next.brand_mission = loaded.brandCore;
+          }
+
+          return next;
+        });
       }
       if (parsed?.updatedAt) {
         const d = new Date(parsed.updatedAt);
@@ -277,7 +448,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
     }
   }, []);
 
-  // ✅ 기업 진단&인터뷰 값 자동 반영(중복 질문 제거)
+  // ✅ 기업 진단&인터뷰 값 자동 반영
   useEffect(() => {
     try {
       const diag = readDiagnosisForm();
@@ -352,6 +523,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
 
     return () => clearTimeout(t);
   }, [form]);
+
   const persistResult = (nextCandidates, nextSelectedId, nextSeed) => {
     const updatedAt = Date.now();
 
@@ -369,6 +541,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
       // ignore
     }
 
+    // ✅ legacy 저장(통합 결과/결과 리포트 페이지 호환)
     try {
       const selected =
         nextCandidates.find((c) => c.id === nextSelectedId) || null;
@@ -484,6 +657,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
     setSaveMsg("");
     setLastSaved("-");
   };
+
   return (
     <div className="diagInterview consultingInterview">
       <PolicyModal
@@ -512,8 +686,8 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 브랜드 스토리 컨설팅 인터뷰
               </h1>
               <p className="diagInterview__sub">
-                기업 진단에서 입력한 기본 정보는 자동 반영되며, 여기서는 스토리
-                재료(핵심·문제·해결·목표)만 입력합니다.
+                기업 진단에서 입력한 기본 정보는 자동 반영되며, 여기서는 브랜드
+                스토리(계기·갈등·전환·미션·플롯·감정·궁극 목표)를 입력합니다.
               </p>
             </div>
 
@@ -523,7 +697,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 className="btn ghost"
                 onClick={() => navigate("/brandconsulting")}
               >
-                브랜드 컨설팅으로
+                브랜드 컨설팅 홈
               </button>
             </div>
           </div>
@@ -598,121 +772,154 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* 2) CORE */}
-              <div className="card" ref={refCore}>
+              {/* 2) STORY MATERIAL */}
+              <div className="card" ref={refMaterial}>
                 <div className="card__head">
-                  <h2>2. 핵심/톤</h2>
-                  <p>스토리의 중심이 되는 가치와 톤을 정리합니다.</p>
+                  <h2>2. 스토리 재료</h2>
+                  <p>
+                    스토리의 사실/재료를 먼저 채우면, 플롯에 맞게 문장이
+                    깔끔해져요.
+                  </p>
                 </div>
 
                 <div className="field">
                   <label>
-                    브랜드 핵심 가치(1~2문장) <span className="req">*</span>
+                    창업 계기/사건 <span className="req">*</span>
                   </label>
                   <textarea
-                    value={form.brandCore}
-                    onChange={(e) => setValue("brandCore", e.target.value)}
-                    placeholder="예) 우리는 창업자가 실행을 지속하도록 구조화된 계획을 제공한다."
-                    rows={4}
+                    value={form.founding_story}
+                    onChange={(e) => setValue("founding_story", e.target.value)}
+                    placeholder="어떤 사건/불편/계기로 시작했나요? (구체적인 장면이 있을수록 좋아요)"
+                    rows={5}
                   />
                 </div>
 
                 <div className="field">
-                  <label>스토리 톤/문체 (선택)</label>
-                  <input
-                    value={form.tone}
-                    onChange={(e) => setValue("tone", e.target.value)}
-                    placeholder="예) 담백, 따뜻, 선명, 프리미엄, 유머(과하지 않게)"
-                  />
-                </div>
-
-                <div className="field">
-                  <label>신뢰 근거(지표/성과/사례) (선택)</label>
+                  <label>
+                    고객이 겪는 가장 큰 결핍/방해물{" "}
+                    <span className="req">*</span>
+                  </label>
                   <textarea
-                    value={form.proof}
-                    onChange={(e) => setValue("proof", e.target.value)}
-                    placeholder="예) 2주만에 실행률 30% 증가, 베타 사용자 200명, 파트너사 3곳"
-                    rows={3}
+                    value={form.customer_conflict}
+                    onChange={(e) =>
+                      setValue("customer_conflict", e.target.value)
+                    }
+                    placeholder="고객이 지금 막히는 지점은 무엇인가요? (시간/정보/비용/신뢰/습관 등)"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    사용 전/후 고객의 변화 <span className="req">*</span>
+                  </label>
+                  <textarea
+                    value={form.customer_transformation}
+                    onChange={(e) =>
+                      setValue("customer_transformation", e.target.value)
+                    }
+                    placeholder="사용 전에는 어떤 상태였고, 사용 후에는 무엇이 달라지나요?"
+                    rows={5}
                   />
                 </div>
               </div>
 
-              {/* 3) STORY MATERIAL */}
-              <div className="card" ref={refStory}>
+              {/* 3) STYLE/EMOTION */}
+              <div className="card" ref={refStyle}>
                 <div className="card__head">
-                  <h2>3. 스토리 재료</h2>
-                  <p>‘문제’와 ‘해결’이 명확해야 설득이 됩니다.</p>
+                  <h2>3. 원하는 플롯/감정</h2>
+                  <p>
+                    스토리텔링 스타일과 자극하고 싶은 감정을 선택하면, 같은
+                    재료도 더 설득력 있게 구성돼요.
+                  </p>
                 </div>
 
                 <div className="field">
-                  <label>시작(창업 계기/개인 경험) (선택)</label>
+                  <label>
+                    원하는 스토리텔링 스타일 <span className="req">*</span>
+                  </label>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    여러 개 선택 가능 (선택한 유형을 우선 반영해 후보를
+                    만들어요)
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.story_plot}
+                      options={STORY_PLOT_OPTIONS}
+                      onChange={(next) => setValue("story_plot", next)}
+                    />
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>
+                    스토리로 자극하고 싶은 감정 <span className="req">*</span>
+                  </label>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    여러 개 선택 가능
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.story_emotion}
+                      options={STORY_EMOTION_OPTIONS}
+                      onChange={(next) => setValue("story_emotion", next)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4) MISSION / ULTIMATE GOAL */}
+              <div className="card" ref={refVision}>
+                <div className="card__head">
+                  <h2>4. 미션/궁극적 목표</h2>
+                  <p>
+                    브랜드가 세상에 남기고 싶은 변화(미션)와 최종적으로 만들고
+                    싶은 세상을 정리합니다.
+                  </p>
+                </div>
+
+                <div className="field">
+                  <label>
+                    수익 외에 세상에 기여하려는 바(미션){" "}
+                    <span className="req">*</span>
+                  </label>
                   <textarea
-                    value={form.originStory}
-                    onChange={(e) => setValue("originStory", e.target.value)}
-                    placeholder="예) 창업자가 직접 겪은 불편함/실패 경험"
-                    rows={3}
+                    value={form.brand_mission}
+                    onChange={(e) => setValue("brand_mission", e.target.value)}
+                    placeholder="예) 누구나 더 쉽게, 더 안전하게, 더 확신 있게 결정할 수 있도록 돕는다"
+                    rows={5}
                   />
                 </div>
 
                 <div className="field">
                   <label>
-                    고객이 겪는 문제(현실) <span className="req">*</span>
+                    궁극적으로 만들고 싶은 세상의 모습{" "}
+                    <span className="req">*</span>
                   </label>
                   <textarea
-                    value={form.problemStory}
-                    onChange={(e) => setValue("problemStory", e.target.value)}
-                    placeholder="예) 정보가 흩어져 결정이 느리고, 실행이 이어지지 않는다."
-                    rows={4}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>
-                    우리가 해결하는 방식(변화) <span className="req">*</span>
-                  </label>
-                  <textarea
-                    value={form.solutionStory}
-                    onChange={(e) => setValue("solutionStory", e.target.value)}
-                    placeholder="예) 체크리스트/로드맵을 자동 생성해 실행의 마찰을 줄인다."
-                    rows={4}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>강조 키워드 (선택)</label>
-                  <input
-                    value={form.keywords}
-                    onChange={(e) => setValue("keywords", e.target.value)}
-                    placeholder="예) 신뢰, 실행, 구조, 성장"
+                    value={form.ultimate_goal}
+                    onChange={(e) => setValue("ultimate_goal", e.target.value)}
+                    placeholder="예) 좋은 선택이 정보 격차에 의해 좌우되지 않는 세상"
+                    rows={5}
                   />
                 </div>
               </div>
 
-              {/* 4) GOAL */}
-              <div className="card" ref={refGoal}>
+              {/* 5) NOTES */}
+              <div className="card" ref={refNotes}>
                 <div className="card__head">
-                  <h2>4. 목표/추가 요청</h2>
-                  <p>스토리를 어디에 쓰는지 명확하면 문장 구조가 좋아져요.</p>
+                  <h2>5. 추가 요청 (선택)</h2>
+                  <p>
+                    길이/문체/사용처 등 추가로 반영할 조건이 있으면 적어주세요.
+                  </p>
                 </div>
 
                 <div className="field">
-                  <label>
-                    스토리 목표 <span className="req">*</span>
-                  </label>
-                  <textarea
-                    value={form.goal}
-                    onChange={(e) => setValue("goal", e.target.value)}
-                    placeholder="예) 투자자 설득용 / 랜딩 페이지 소개용 / 브랜드 소개서용"
-                    rows={3}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>추가 메모 (선택)</label>
+                  <label>추가 메모</label>
                   <textarea
                     value={form.notes}
                     onChange={(e) => setValue("notes", e.target.value)}
-                    placeholder="예) 너무 길지 않게, 4~6문장으로 요약 버전도 필요해요."
+                    placeholder="예) 랜딩페이지용으로 6~8문장 버전 + 2문장 요약도 같이"
                     rows={4}
                   />
                 </div>
@@ -777,6 +984,15 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                               <div style={{ marginTop: 6, opacity: 0.9 }}>
                                 {c.oneLiner}
                               </div>
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  opacity: 0.8,
+                                  fontSize: 12,
+                                }}
+                              >
+                                {c.meta}
+                              </div>
                             </div>
                             <span
                               style={{
@@ -810,10 +1026,10 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                             {c.story}
 
                             <div style={{ marginTop: 10, opacity: 0.9 }}>
-                              <b>톤</b> · {c.tone}
+                              <b>플롯</b> · {c.plot}
                             </div>
                             <div style={{ marginTop: 6, opacity: 0.9 }}>
-                              <b>근거</b> · {c.proof}
+                              <b>감정</b> · {(c.emotions || []).join(" · ")}
                             </div>
                             <div style={{ marginTop: 6, opacity: 0.9 }}>
                               <b>마무리</b> · {c.ending}
@@ -829,7 +1045,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                                   gap: 6,
                                 }}
                               >
-                                {c.keywords.map((kw) => (
+                                {(c.keywords || []).map((kw) => (
                                   <span
                                     key={kw}
                                     style={{
@@ -866,27 +1082,11 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                     })}
                   </div>
 
-                  {canGoNext ? (
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="btn primary"
-                        onClick={handleGoNext}
-                      >
-                        다음 단계로
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
-                      * 후보 1개를 선택하면 다음 단계로 진행할 수 있어요.
-                    </div>
-                  )}
+                  <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+                    {canGoNext
+                      ? "✅ 사이드 카드에서 ‘로고 단계로 이동’ 버튼을 눌러주세요."
+                      : "* 후보 1개를 선택하면 사이드 카드에 다음 단계 버튼이 표시됩니다."}
+                  </div>
                 </div>
               ) : null}
             </section>
@@ -970,19 +1170,21 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
 
                 <div className="divider" />
 
-                <h4 className="sideSubTitle">섹션 바로가기</h4>
-                <div className="jumpGrid">
-                  {sections.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className="jumpBtn"
-                      onClick={() => scrollToSection(s.ref)}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
+                <h4 className="sideSubTitle">다음 단계</h4>
+                {canGoNext ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={handleGoNext}
+                    style={{ width: "100%" }}
+                  >
+                    로고 단계로 이동
+                  </button>
+                ) : (
+                  <p className="hint" style={{ marginTop: 10 }}>
+                    * 후보 1개를 선택하면 다음 단계 버튼이 표시됩니다.
+                  </p>
+                )}
               </div>
             </aside>
           </div>

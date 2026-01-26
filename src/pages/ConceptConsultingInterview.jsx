@@ -23,15 +23,6 @@ function safeText(v, fallback = "") {
   return s ? s : fallback;
 }
 
-function pickKeywords(text, max = 10) {
-  const raw = String(text || "")
-    .split(/[,\n\t]/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const uniq = Array.from(new Set(raw));
-  return uniq.slice(0, max);
-}
-
 function stageLabel(v) {
   const s = String(v || "")
     .trim()
@@ -66,62 +57,149 @@ function readDiagnosisForm() {
   return null;
 }
 
+function isFilled(v) {
+  if (Array.isArray(v)) return v.length > 0;
+  return Boolean(String(v ?? "").trim());
+}
+
+/** ✅ multiple 선택용 칩 UI */
+function MultiChips({ value, options, onChange, max = null }) {
+  const current = Array.isArray(value) ? value : [];
+
+  const toggle = (opt) => {
+    const exists = current.includes(opt);
+    let next = exists ? current.filter((x) => x !== opt) : [...current, opt];
+
+    if (typeof max === "number" && max > 0 && next.length > max) {
+      next = next.slice(0, max);
+    }
+    onChange(next);
+  };
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((opt) => {
+        const active = current.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            className="chip"
+            aria-pressed={active}
+            onClick={() => toggle(opt)}
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: active ? "rgba(99,102,241,0.12)" : "rgba(0,0,0,0.04)",
+              border: active
+                ? "1px solid rgba(99,102,241,0.25)"
+                : "1px solid rgba(0,0,0,0.10)",
+              color: "rgba(0,0,0,0.78)",
+              cursor: "pointer",
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function generateConceptCandidates(form, seed = 0) {
   const brandName = safeText(form?.brandName, "브랜드");
   const category = safeText(form?.category, "분야");
   const stage = stageLabel(form?.stage);
-  const oneLine = safeText(form?.oneLine, "");
   const target = safeText(form?.targetCustomer, "고객");
-  const pains = pickKeywords(form?.painsTop3, 6);
-  const desired = pickKeywords(form?.desiredKeywords, 8);
-  const avoid = pickKeywords(form?.avoidKeywords, 8);
-  const promise = safeText(form?.brandPromise, "핵심 약속");
-  const value = safeText(form?.valueProposition, "가치 제안");
+  const oneLine = safeText(form?.oneLine, "");
+
+  const coreValues = Array.isArray(form?.core_values) ? form.core_values : [];
+  const brandVoice = Array.isArray(form?.brand_voice) ? form.brand_voice : [];
+  const brandArchetype = Array.isArray(form?.brand_archetype)
+    ? form.brand_archetype
+    : [];
+
+  const keyMessage = safeText(form?.key_message, "고객이 기억해야 할 한 문장");
+  const trustFactors = safeText(form?.trust_factors, "신뢰 포인트");
+  const vibe = safeText(form?.concept_vibe, "담백하고 신뢰감");
+  const sloganKw = safeText(form?.slogan_keywords, "");
 
   const pick = (arr, idx) => arr[(idx + seed) % arr.length];
 
-  const tones = ["미니멀/신뢰", "테크/선명", "따뜻/친근", "프리미엄/정제"];
-  const archetypes = [
-    "가이드",
-    "메이커",
-    "파운더",
-    "파트너",
-    "엔진",
-    "스튜디오",
+  const tonePresets = [
+    { tone: "미니멀/신뢰", vibeHint: "차분 · 정돈 · 확신" },
+    { tone: "테크/선명", vibeHint: "명확 · 속도 · 정확" },
+    { tone: "따뜻/친근", vibeHint: "따뜻 · 쉬움 · 공감" },
   ];
+
   const slogans = [
-    "계획을 실행으로 바꾸다",
     "복잡함을 단순하게",
+    "신뢰로 선택을 돕다",
     "성장을 설계하다",
-    "작은 시작을 크게",
-    "신뢰로 연결하다",
+    "실행을 이어가다",
+    "확신을 만드는 한 걸음",
   ];
 
-  const base = (tone, arche) => ({
-    id: `${tone}-${arche}`.replace(/\s+/g, "").toLowerCase(),
-    title: `${brandName} · ${tone} 컨셉`,
-    summary: `${category}(${stage})에서 ${target}을 위해 '${promise}'를 전달하는 ${arche}형 브랜드`,
-    positioning: `우리는 ${category}에서 ${target}이 ${pains.length ? pains[0] : "문제"}를 해결하도록 돕는 ${arche}입니다.`,
-    valueProposition: value,
-    tone,
-    keywords: Array.from(
-      new Set([...desired, tone.split("/")[0], arche]),
-    ).slice(0, 10),
-    avoid,
-    slogan: pick(slogans, 0),
-    oneLine: oneLine ? `“${oneLine}”` : `“${pick(slogans, 1)}”`,
-  });
+  const mk = (id, preset, archeFallback, voiceFallback) => {
+    const arche = brandArchetype[0] || archeFallback;
+    const voice = brandVoice[0] || voiceFallback;
+    const core = coreValues.length
+      ? coreValues.slice(0, 2).join(" · ")
+      : "신뢰 · 단순함";
 
-  const c1 = base(pick(tones, 0), pick(archetypes, 0));
-  const c2 = base(pick(tones, 1), pick(archetypes, 2));
-  const c3 = base(pick(tones, 3), pick(archetypes, 4));
+    const slogan = sloganKw
+      ? `${sloganKw}로 더 ${preset.tone.split("/")[0]}하게`
+      : pick(slogans, 0);
 
-  // 약간 변주
-  c2.slogan = pick(slogans, 2);
-  c3.slogan = pick(slogans, 3);
+    const keywords = Array.from(
+      new Set([
+        ...coreValues,
+        arche,
+        voice,
+        vibe,
+        ...(sloganKw ? [sloganKw] : []),
+        preset.tone.split("/")[0],
+      ]),
+    ).slice(0, 10);
 
-  return [c1, c2, c3].map((c, i) => ({ ...c, id: `concept_${i + 1}` }));
+    return {
+      id,
+      title: `${brandName} · ${preset.tone} 컨셉`,
+      summary: `${category}(${stage})에서 ${target}에게 '${keyMessage}'를 전달하는 ${arche}형 브랜드`,
+      tone: `${voice} · ${preset.tone}`,
+      coreValues: coreValues.length ? coreValues : ["신뢰", "단순함"],
+      brandVoice: brandVoice.length ? brandVoice : [voice],
+      brandArchetype: brandArchetype.length ? brandArchetype : [arche],
+      keyMessage,
+      trustFactors,
+      conceptVibe: vibe || preset.vibeHint,
+      slogan,
+      keywords,
+      oneLine: oneLine ? `“${oneLine}”` : `“${keyMessage}”`,
+      note: `핵심가치(${core}) 기반으로 ‘톤/아키타입/시각 분위기’를 정렬한 방향입니다.`,
+    };
+  };
+
+  const p1 = pick(tonePresets, 0);
+  const p2 = pick(tonePresets, 1);
+  const p3 = pick(tonePresets, 2);
+
+  return [
+    mk("concept_1", p1, "현자(Sage)", "전문적인 박사님"),
+    mk("concept_2", p2, "창조자(Creator)", "친절한 가이드"),
+    mk("concept_3", p3, "영웅(Hero)", "위트 있는 친구"),
+  ];
 }
+
+const CORE_VALUE_OPTIONS = ["혁신", "신뢰", "단순함"];
+const BRAND_VOICE_OPTIONS = [
+  "전문적인 박사님",
+  "친절한 가이드",
+  "위트 있는 친구",
+];
+const ARCHETYPE_OPTIONS = ["현자(Sage)", "영웅(Hero)", "창조자(Creator)"];
 
 const INITIAL_FORM = {
   // ✅ 기업 진단에서 자동 반영(편집 X)
@@ -132,13 +210,15 @@ const INITIAL_FORM = {
   targetCustomer: "",
   referenceLink: "",
 
-  // ✅ 컨셉 컨설팅 질문(편집 O)
-  painsTop3: "",
-  valueProposition: "",
-  brandPromise: "",
-  desiredKeywords: "",
-  avoidKeywords: "",
-  notes: "",
+  // ✅ Step 3. 브랜드 컨셉/톤 (편집 O)
+  core_values: [], // multiple
+  brand_voice: [], // multiple
+  brand_archetype: [], // multiple
+  key_message: "",
+  trust_factors: "",
+  concept_vibe: "",
+  slogan_keywords: "", // optional
+  notes: "", // 선택 메모(유지)
 };
 
 export default function ConceptConsultingInterview({ onLogout }) {
@@ -164,35 +244,35 @@ export default function ConceptConsultingInterview({ onLogout }) {
 
   // 섹션 ref
   const refBasic = useRef(null);
-  const refCore = useRef(null);
-  const refKeywords = useRef(null);
+  const refConcept = useRef(null);
   const refNotes = useRef(null);
 
   const sections = useMemo(
     () => [
       { id: "basic", label: "기본 정보", ref: refBasic },
-      { id: "core", label: "컨셉 핵심", ref: refCore },
-      { id: "keywords", label: "키워드", ref: refKeywords },
+      { id: "concept", label: "브랜드 컨셉/톤", ref: refConcept },
       { id: "notes", label: "추가 요청", ref: refNotes },
     ],
     [],
   );
 
-  // ✅ 필수 항목(컨셉에서 사용자가 입력해야 하는 것만)
+  // ✅ 필수 항목(이번 Step3 질문 기준)
   const requiredKeys = useMemo(
     () => [
-      "painsTop3",
-      "valueProposition",
-      "brandPromise",
-      "desiredKeywords",
-      "avoidKeywords",
+      "core_values",
+      "brand_voice",
+      "brand_archetype",
+      "key_message",
+      "trust_factors",
+      "concept_vibe",
     ],
     [],
   );
+
   const requiredStatus = useMemo(() => {
     const status = {};
     requiredKeys.forEach((k) => {
-      status[k] = Boolean(String(form?.[k] || "").trim());
+      status[k] = isFilled(form?.[k]);
     });
     return status;
   }, [form, requiredKeys]);
@@ -242,7 +322,7 @@ export default function ConceptConsultingInterview({ onLogout }) {
     }
   }, []);
 
-  // ✅ 기업 진단&인터뷰 값 자동 반영(중복 질문 제거)
+  // ✅ 기업 진단&인터뷰 값 자동 반영
   useEffect(() => {
     try {
       const diag = readDiagnosisForm();
@@ -320,6 +400,7 @@ export default function ConceptConsultingInterview({ onLogout }) {
 
     return () => clearTimeout(t);
   }, [form]);
+
   const persistResult = (nextCandidates, nextSelectedId, nextSeed) => {
     const updatedAt = Date.now();
 
@@ -453,6 +534,7 @@ export default function ConceptConsultingInterview({ onLogout }) {
     setSaveMsg("");
     setLastSaved("-");
   };
+
   return (
     <div className="diagInterview consultingInterview">
       <PolicyModal
@@ -479,8 +561,8 @@ export default function ConceptConsultingInterview({ onLogout }) {
             <div>
               <h1 className="diagInterview__title">컨셉 컨설팅 인터뷰</h1>
               <p className="diagInterview__sub">
-                기업 진단에서 입력한 기본 정보는 자동 반영되며, 여기서는 컨셉
-                방향(문제·가치·약속·키워드)만 입력합니다.
+                기업 진단에서 입력한 기본 정보는 자동 반영되며, 여기서는 브랜드
+                컨셉/톤(가치·말투·아키타입·키메시지·신뢰·분위기)을 입력합니다.
               </p>
             </div>
 
@@ -490,7 +572,7 @@ export default function ConceptConsultingInterview({ onLogout }) {
                 className="btn ghost"
                 onClick={() => navigate("/brandconsulting")}
               >
-                브랜드 컨설팅으로
+                브랜드 컨설팅 홈
               </button>
             </div>
           </div>
@@ -565,94 +647,121 @@ export default function ConceptConsultingInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* 2) CORE */}
-              <div className="card" ref={refCore}>
+              {/* 2) Step 3. 브랜드 컨셉/톤 */}
+              <div className="card" ref={refConcept}>
                 <div className="card__head">
-                  <h2>2. 컨셉 핵심</h2>
-                  <p>문제·가치·약속을 명확히 하면 컨셉이 선명해져요.</p>
-                </div>
-
-                <div className="field">
-                  <label>
-                    고객의 핵심 문제 TOP 3 <span className="req">*</span>
-                  </label>
-                  <textarea
-                    value={form.painsTop3}
-                    onChange={(e) => setValue("painsTop3", e.target.value)}
-                    placeholder="예) 정보가 흩어져서 결정이 느림, 실행이 이어지지 않음, 신뢰할 근거가 부족함"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>
-                    가치 제안(무엇이 달라지나) <span className="req">*</span>
-                  </label>
-                  <textarea
-                    value={form.valueProposition}
-                    onChange={(e) =>
-                      setValue("valueProposition", e.target.value)
-                    }
-                    placeholder="예) 입력만 하면 실행 체크리스트/로드맵이 자동 생성되어 바로 실행 가능"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="field">
-                  <label>
-                    브랜드 약속(브랜드가 지키는 1문장){" "}
-                    <span className="req">*</span>
-                  </label>
-                  <textarea
-                    value={form.brandPromise}
-                    onChange={(e) => setValue("brandPromise", e.target.value)}
-                    placeholder="예) 우리는 당신의 아이디어를 실행 가능한 계획으로 바꿔줍니다."
-                    rows={3}
-                  />
-                </div>
-              </div>
-
-              {/* 3) KEYWORDS */}
-              <div className="card" ref={refKeywords}>
-                <div className="card__head">
-                  <h2>3. 키워드</h2>
+                  <h2>2. 브랜드 컨셉/톤 (Concept)</h2>
                   <p>
-                    원하는 느낌/피하고 싶은 느낌을 분리하면 결과가 좋아져요.
+                    브랜드의 중심 가치, 말투, 성격(아키타입)을 정하고
+                    메시지/신뢰/분위기를 정리합니다.
                   </p>
                 </div>
 
                 <div className="field">
                   <label>
-                    포함하고 싶은 키워드(3~10개) <span className="req">*</span>
+                    절대 포기할 수 없는 가치 2가지{" "}
+                    <span className="req">*</span>
                   </label>
-                  <textarea
-                    value={form.desiredKeywords}
-                    onChange={(e) =>
-                      setValue("desiredKeywords", e.target.value)
-                    }
-                    placeholder="예) 신뢰, 미니멀, 실행, 구조, 성장, 정확"
-                    rows={4}
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    최대 2개까지 선택되도록 저장됩니다.
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.core_values}
+                      options={CORE_VALUE_OPTIONS}
+                      max={2}
+                      onChange={(next) => setValue("core_values", next)}
+                    />
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>
+                    고객에게 말 건다면 말투 <span className="req">*</span>
+                  </label>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    여러 개 선택 가능 (추천: 1~2개)
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.brand_voice}
+                      options={BRAND_VOICE_OPTIONS}
+                      onChange={(next) => setValue("brand_voice", next)}
+                    />
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>
+                    브랜드 성격(아키타입) <span className="req">*</span>
+                  </label>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    여러 개 선택 가능 (추천: 1개를 대표로)
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.brand_archetype}
+                      options={ARCHETYPE_OPTIONS}
+                      onChange={(next) => setValue("brand_archetype", next)}
+                    />
+                  </div>
+                </div>
+
+                <div className="field">
+                  <label>
+                    고객이 기억해야 할 한 문장(키 메시지){" "}
+                    <span className="req">*</span>
+                  </label>
+                  <input
+                    value={form.key_message}
+                    onChange={(e) => setValue("key_message", e.target.value)}
+                    placeholder="예) 우리는 당신의 결정을 더 빠르고 확실하게 만듭니다."
                   />
                 </div>
 
                 <div className="field">
                   <label>
-                    피하고 싶은 키워드(3~10개) <span className="req">*</span>
+                    고객을 안심시키는 근거(신뢰 포인트){" "}
+                    <span className="req">*</span>
                   </label>
-                  <textarea
-                    value={form.avoidKeywords}
-                    onChange={(e) => setValue("avoidKeywords", e.target.value)}
-                    placeholder="예) 유치함, 과장, 복잡함, 딱딱함"
-                    rows={4}
+                  <input
+                    value={form.trust_factors}
+                    onChange={(e) => setValue("trust_factors", e.target.value)}
+                    placeholder="예) 실제 데이터 기반 추천 / 검증된 파트너 / 성과 지표"
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    브랜드 전체 분위기(시각/심리) <span className="req">*</span>
+                  </label>
+                  <input
+                    value={form.concept_vibe}
+                    onChange={(e) => setValue("concept_vibe", e.target.value)}
+                    placeholder="예) 미니멀, 차분, 선명, 고급스러움, 따뜻함"
+                  />
+                </div>
+
+                <div className="field">
+                  <label>슬로건에 들어갈 핵심 단어(선택)</label>
+                  <input
+                    value={form.slogan_keywords}
+                    onChange={(e) =>
+                      setValue("slogan_keywords", e.target.value)
+                    }
+                    placeholder="예) 신뢰 / 실행 / 성장 / 단순"
                   />
                 </div>
               </div>
 
-              {/* 4) NOTES */}
+              {/* 3) NOTES */}
               <div className="card" ref={refNotes}>
                 <div className="card__head">
-                  <h2>4. 추가 요청 (선택)</h2>
-                  <p>참고할 톤/레퍼런스가 있으면 적어주세요.</p>
+                  <h2>3. 추가 요청 (선택)</h2>
+                  <p>
+                    추가로 반영하고 싶은 조건이나 강조 포인트가 있으면
+                    적어주세요.
+                  </p>
                 </div>
 
                 <div className="field">
@@ -660,7 +769,7 @@ export default function ConceptConsultingInterview({ onLogout }) {
                   <textarea
                     value={form.notes}
                     onChange={(e) => setValue("notes", e.target.value)}
-                    placeholder="예) 슬로건은 한 문장으로, 톤은 차분하고 고급스럽게"
+                    placeholder="예) 너무 과장되지 않게, 1~2문장으로 짧고 선명하게"
                     rows={5}
                   />
                 </div>
@@ -754,14 +863,26 @@ export default function ConceptConsultingInterview({ onLogout }) {
                             }}
                           >
                             <div>
-                              <b>포지셔닝</b> · {c.positioning}
-                            </div>
-                            <div style={{ marginTop: 6 }}>
-                              <b>가치</b> · {c.valueProposition}
-                            </div>
-                            <div style={{ marginTop: 6 }}>
                               <b>톤</b> · {c.tone}
                             </div>
+                            <div style={{ marginTop: 6 }}>
+                              <b>핵심가치</b> ·{" "}
+                              {(c.coreValues || []).join(" · ")}
+                            </div>
+                            <div style={{ marginTop: 6 }}>
+                              <b>아키타입</b> ·{" "}
+                              {(c.brandArchetype || []).join(" · ")}
+                            </div>
+                            <div style={{ marginTop: 6 }}>
+                              <b>키 메시지</b> · {c.keyMessage}
+                            </div>
+                            <div style={{ marginTop: 6 }}>
+                              <b>신뢰 포인트</b> · {c.trustFactors}
+                            </div>
+                            <div style={{ marginTop: 6 }}>
+                              <b>분위기</b> · {c.conceptVibe}
+                            </div>
+
                             <div style={{ marginTop: 10 }}>
                               <b>키워드</b>
                               <div
@@ -772,7 +893,7 @@ export default function ConceptConsultingInterview({ onLogout }) {
                                   gap: 6,
                                 }}
                               >
-                                {c.keywords.map((kw) => (
+                                {(c.keywords || []).map((kw) => (
                                   <span
                                     key={kw}
                                     style={{
@@ -791,12 +912,6 @@ export default function ConceptConsultingInterview({ onLogout }) {
                               </div>
                             </div>
 
-                            {c.avoid?.length ? (
-                              <div style={{ marginTop: 8, opacity: 0.85 }}>
-                                <b>피해야 할 키워드</b> · {c.avoid.join(", ")}
-                              </div>
-                            ) : null}
-
                             <div style={{ marginTop: 10, opacity: 0.9 }}>
                               <b>슬로건</b> · {c.slogan}
                             </div>
@@ -804,6 +919,12 @@ export default function ConceptConsultingInterview({ onLogout }) {
                             <div style={{ marginTop: 6, opacity: 0.9 }}>
                               <b>원라인</b> · {c.oneLine}
                             </div>
+
+                            {c.note ? (
+                              <div style={{ marginTop: 10, opacity: 0.85 }}>
+                                <b>메모</b> · {c.note}
+                              </div>
+                            ) : null}
                           </div>
 
                           <div
@@ -823,27 +944,11 @@ export default function ConceptConsultingInterview({ onLogout }) {
                     })}
                   </div>
 
-                  {canGoNext ? (
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        justifyContent: "flex-end",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="btn primary"
-                        onClick={handleGoNext}
-                      >
-                        다음 단계로
-                      </button>
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
-                      * 후보 1개를 선택하면 다음 단계로 진행할 수 있어요.
-                    </div>
-                  )}
+                  <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+                    {canGoNext
+                      ? "✅ 사이드 카드에서 ‘스토리 단계로 이동’ 버튼을 눌러주세요."
+                      : "* 후보 1개를 선택하면 사이드 카드에 다음 단계 버튼이 표시됩니다."}
+                  </div>
                 </div>
               ) : null}
             </section>
@@ -927,19 +1032,21 @@ export default function ConceptConsultingInterview({ onLogout }) {
 
                 <div className="divider" />
 
-                <h4 className="sideSubTitle">섹션 바로가기</h4>
-                <div className="jumpGrid">
-                  {sections.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className="jumpBtn"
-                      onClick={() => scrollToSection(s.ref)}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
+                <h4 className="sideSubTitle">다음 단계</h4>
+                {canGoNext ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={handleGoNext}
+                    style={{ width: "100%" }}
+                  >
+                    스토리 단계로 이동
+                  </button>
+                ) : (
+                  <p className="hint" style={{ marginTop: 10 }}>
+                    * 후보 1개를 선택하면 다음 단계 버튼이 표시됩니다.
+                  </p>
+                )}
               </div>
             </aside>
           </div>

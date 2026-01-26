@@ -18,8 +18,10 @@ const BRAND_STEP_ROUTES = {
   // 소개/허브
   home: "/brandconsulting",
 
-  // 유저 리포트(통합 결과)
-  report: "/mypage/brand-results",
+  // ✅ 리포트(기업진단 결과 페이지)
+  // - 브랜드 컨설팅은 '기업진단 요약'을 기반으로 진행되므로,
+  //   헤더의 '내 리포트'는 기업진단 결과 페이지로 연결
+  report: "/diagnosis/result",
 
   // 단계 바로가기(인터뷰/진행)
   naming: "/brand/naming/interview",
@@ -277,7 +279,7 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
                 handleBrandNavigate(BRAND_STEP_ROUTES.report, "report")
               }
             >
-              내 리포트
+              기업진단 리포트
             </button>
 
             <div className="nav-dropdown__divider" aria-hidden="true" />

@@ -57,28 +57,48 @@ export default function App() {
       <Routes>
         {/* ✅ 기본 진입: 로그인 */}
         <Route path="/" element={<Login />} />
-
         {/* ✅ 로그인/계정 */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/findid" element={<FindID />} />
         <Route path="/findpw" element={<FindPassword />} />
         <Route path="/easylogin" element={<EasyLogin />} />
-
         {/* ✅ 메인 */}
         <Route path="/main" element={<MainPage />} />
-
         {/* ✅ 기업 진단 */}
         <Route path="/diagnosis" element={<DiagnosisHome />} />
         <Route path="/diagnosisinterview" element={<DiagnosisInterview />} />
         <Route path="/diagnosis/result" element={<DiagnosisResult />} />
-
         {/* ✅ 브랜드 컨설팅 메인 */}
         <Route path="/brandconsulting" element={<BrandConsulting />} />
-
-        {/* ✅ 브랜드 컨설팅 인터뷰 */}
-        <Route path="/logoconsulting" element={<LogoConsultingInterview />} />
+        {/* ✅ 브랜드 컨설팅 인터뷰(권장 표준 라우트) */}
+        <Route
+          path="/brand/naming/interview"
+          element={<NamingConsultingInterview />}
+        />
+        <Route
+          path="/brand/concept/interview"
+          element={<ConceptConsultingInterview />}
+        />
+        <Route
+          path="/brand/story"
+          element={<BrandStoryConsultingInterview />}
+        />
+        <Route
+          path="/brand/story/interview"
+          element={<BrandStoryConsultingInterview />}
+        />{" "}
+        {/* ✅ alias */}
+        <Route
+          path="/brand/logo/interview"
+          element={<LogoConsultingInterview />}
+        />
+        {/* ✅ 기존 라우트(alias) 유지 */}
         <Route path="/nameconsulting" element={<NamingConsultingInterview />} />
+        <Route
+          path="/namingconsulting"
+          element={<NamingConsultingInterview />}
+        />
         <Route
           path="/conceptconsulting"
           element={<ConceptConsultingInterview />}
@@ -87,50 +107,25 @@ export default function App() {
           path="/homepageconsulting"
           element={<ConceptConsultingInterview />}
         />
-
-        {/* ✅ (선택) 별칭(alias)도 유지 */}
-        <Route
-          path="/namingconsulting"
-          element={<NamingConsultingInterview />}
-        />
-        <Route
-          path="/brand/naming/interview"
-          element={<NamingConsultingInterview />}
-        />
-        <Route
-          path="/brand/logo/interview"
-          element={<LogoConsultingInterview />}
-        />
         <Route
           path="/brand/homepage/interview"
           element={<ConceptConsultingInterview />}
-        />
-
-        
-        <Route
-          path="/brand/concept/interview"
-          element={<ConceptConsultingInterview />}
-        />{/* ✅ 브랜드 스토리 컨설팅 */}
-        <Route
-          path="/brand/story"
-          element={<BrandStoryConsultingInterview />}
-        />
+        />{" "}
+        {/* legacy */}
         <Route
           path="/brandstoryconsulting"
           element={<BrandStoryConsultingInterview />}
         />
-
+        <Route path="/logoconsulting" element={<LogoConsultingInterview />} />
         {/* ✅ 브랜드/홍보물 결과 단일 페이지 */}
         <Route path="/brand/result" element={<BrandConsultingResult />} />
         <Route path="/promotion/result" element={<PromotionResult />} />
-
         {/* ✅ 통합 결과 페이지 */}
         <Route path="/mypage/brand-results" element={<BrandAllResults />} />
         <Route
           path="/mypage/promotion-results"
           element={<PromotionAllResults />}
         />
-
         {/* ✅ 홍보물 컨설팅 */}
         <Route path="/promotion" element={<PromotionPage />} />
         <Route
@@ -149,16 +144,13 @@ export default function App() {
           path="/promotion/poster/interview"
           element={<SNSPosterConsultingInterview />}
         />
-
         {/* ✅ 마이페이지 */}
         <Route path="/mypage" element={<MyPage />} />
-
         {/* ✅ 투자 라운지 */}
         <Route path="/investment" element={<InvestmentBoard />} />
         <Route path="/investment/new" element={<InvestmentPostCreate />} />
         <Route path="/investment/:id" element={<InvestmentPostDetail />} />
         <Route path="/investment/edit/:id" element={<InvestmentPostEdit />} />
-
         {/* ✅ 없는 경로는 메인으로 */}
         <Route path="*" element={<Navigate to="/main" replace />} />
       </Routes>

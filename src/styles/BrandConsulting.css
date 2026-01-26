@@ -182,7 +182,6 @@
   color: #0f172a;
 }
 
-
 /* ✅ Flow header (minimal + structured) */
 .bcFlowHeader {
   display: flex;
@@ -231,7 +230,6 @@
   }
 }
 
-
 /* ✅ Intro Card */
 .bcIntroCard {
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
@@ -273,7 +271,6 @@
   line-height: 1.75;
 }
 
-
 /* ✅ Intro stats (compact info blocks) */
 .bcIntroStats {
   margin-top: 14px;
@@ -305,7 +302,6 @@
   color: #0f172a;
   text-align: right;
 }
-
 
 .bcBullets {
   margin: 0;
@@ -357,10 +353,6 @@
   text-align: center;
   line-height: 1.6;
 }
-
-
-/* ✅ Step Flow (4 steps in a single row with arrows) */
-
 
 /* ✅ 4단계 흐름: 1개의 카드 안에 정리 */
 .bcFlowCard {
@@ -524,73 +516,12 @@
     height: 150px;
   }
 }
-.bcStepFlow {
-  margin-top: 6px;
-  margin-bottom: 18px;
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.bcStepCard {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.bcStepArrow {
-  flex: 0 0 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.bcStepArrow__icon {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #f2f6ff;
-  border: 1px solid #dbe7ff;
-  color: #1766e5;
-  font-weight: 900;
-  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.06);
-}
-
-@media (max-width: 980px) {
-  .bcStepFlow {
-    overflow-x: auto;
-    padding-bottom: 8px;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory;
-  }
-
-  .bcStepCard {
-    flex: 0 0 280px;
-    scroll-snap-align: start;
-  }
-
-  .bcStepArrow {
-    flex: 0 0 36px;
-  }
-
-  .bcStepArrow__icon {
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
-  }
-}
 
 /* ✅ Cards */
 .service-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
-}
-
-.bcStepGrid {
-  margin-top: 6px;
 }
 
 .service-card--static {
@@ -600,28 +531,6 @@
 .service-card--static:hover {
   transform: none;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
-}
-
-.bcStepHint {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #475569;
-  background: #f6f7fb;
-  border: 1px dashed #d6dbea;
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-
-.bcBottomCTA {
-  margin-top: 18px;
-  padding: 16px;
-  border-radius: 18px;
-  background: #ffffff;
-  border: 1px solid #e6e9f1;
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
 }
 
 .bcBottomCTA__hint {
@@ -641,7 +550,9 @@
   gap: 10px;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .service-card:hover {
@@ -650,9 +561,6 @@
 }
 
 .service-image {
-  /* height: 180px;
-  border-radius: 14px;
-  overflow: hidden; */
   border-radius: 14px;
   overflow: hidden;
   background: #eef2f8;
@@ -668,10 +576,6 @@
 }
 
 .service-tag {
-  /* margin: 0;
-  font-size: 12px;
-  color: #4f46e5;
-  font-weight: 700; */
   margin: 0;
   font-size: 11px;
   color: #4f46e5;
@@ -686,11 +590,6 @@
 }
 
 .service-meta {
-  /* display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #5b6476; */
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -723,4 +622,67 @@
   .hero-slide span {
     font-size: 18px;
   }
+}
+
+/* =========================================================
+   ✅ 추가: "완료한 브랜드 리포트 보기" hover 툴팁
+   - disabled 속성 없이도 hover 가능
+========================================================= */
+
+/* 버튼 기준점 */
+.bcTooltipBtn {
+  position: relative;
+}
+
+/* 가짜 disabled */
+.bcTooltipBtn.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* 툴팁 */
+.bcTooltip {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px); /* ✅ 버튼 아래로 */
+  transform: translateX(-50%) translateY(-6px);
+  white-space: nowrap;
+
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 900;
+
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  z-index: 50;
+}
+
+.bcTooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -6px; /* ✅ 툴팁 상단에 꼬리 */
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  background: rgba(17, 24, 39, 0.92);
+  rotate: 45deg;
+  border-radius: 2px;
+}
+
+/* ✅ 비활성 상태에서 hover 시 툴팁 표시 */
+.bcTooltipBtn.is-disabled:hover .bcTooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.bcFlowActions {
+  overflow: visible; /* ✅ 툴팁이 카드 밖으로 나와도 안 잘리게 */
 }

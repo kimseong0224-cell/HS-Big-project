@@ -66,6 +66,28 @@ const FIELD_LABELS = {
   solutionStory: "해결 방식(Solution)",
   keyMessages: "핵심 메시지",
   proof: "근거/증거(성과/수치/사례)",
+
+  // ✅ 컨셉 컨설팅(Concept)
+  brandName: "브랜드/서비스명",
+  category: "업종/카테고리",
+  stage: "현재 단계",
+  core_values: "핵심 가치",
+  target: "타겟 고객",
+  differentiation: "차별점",
+  concept_vibe: "원하는 분위기",
+  tone_style: "톤/스타일",
+  archetype: "브랜드 아키타입",
+
+  // ✅ 컨셉 결과(선택안)
+  selected_conceptTitle: "컨셉 타이틀",
+  selected_tagline: "태그라인",
+  selected_conceptStatement: "한 문장 정의",
+  selected_voice: "보이스/말투",
+  selected_keywords: "키워드",
+  selected_quickPitch: "10초 피치",
+  selected_doDont: "Do / Don't",
+  selected_colorMood: "컬러/무드",
+  selected_heroImagery: "추천 이미지",
 };
 
 function stageLabel(stage) {
@@ -87,7 +109,7 @@ const SERVICE_CONFIG = {
       "namingConsultingInterviewDraft_v1",
       "brandInterview_naming_v1",
     ],
-    interviewPath: "/nameconsulting", // ✅ App.jsx와 일치
+    interviewPath: "/brand/naming/interview", // ✅ App.jsx와 일치
     requiredKeys: [
       "companyName",
       "industry",
@@ -128,7 +150,7 @@ const SERVICE_CONFIG = {
     sub: "입력 내용을 기반으로 요약 리포트를 생성했습니다. (현재는 UI/연결용 더미 리포트)",
     storageKey: "brandInterview_logo_v1",
     resetKeys: ["logoConsultingInterviewDraft_v1", "brandInterview_logo_v1"],
-    interviewPath: "/logoconsulting", // ✅ App.jsx와 일치
+    interviewPath: "/brand/logo/interview", // ✅ App.jsx와 일치
     requiredKeys: [
       "companyName",
       "industry",
@@ -176,51 +198,86 @@ const SERVICE_CONFIG = {
 
   homepage: {
     title: "컨셉 컨설팅 결과 리포트",
-    sub: "입력 내용을 기반으로 요약 리포트를 생성했습니다. (현재는 UI/연결용 더미 리포트)",
-    storageKey: "brandInterview_homepage_v1",
+    sub: "저장된 결과(선택안/후보안)를 기반으로 리포트를 표시합니다.",
+    storageKey: "brandInterview_concept_v1",
+    storageKeyFallback: "brandInterview_homepage_v1",
     resetKeys: [
-      "homepageConsultingInterviewDraft_v1",
+      "conceptConsultingInterviewDraft_v1",
+      "conceptInterviewDraft_homepage_v6",
+      "conceptConsultingInterviewResult_v1",
+      "conceptInterviewResult_homepage_v6",
+      "brandInterview_concept_v1",
       "brandInterview_homepage_v1",
     ],
-    interviewPath: "/conceptconsulting", // ✅ App.jsx와 일치
+    interviewPath: "/brand/concept/interview",
     requiredKeys: [
-      "companyName",
-      "industry",
+      "brandName",
+      "category",
       "stage",
-      "oneLine",
-      "siteGoal",
-      "primaryAction",
-      "targetCustomer",
-      "mainSections",
+      "core_values",
+      "target",
+      "differentiation",
+      "tone_style",
+      "archetype",
     ],
+    enrichForm: (draft) => {
+      const picked =
+        draft?.selected ||
+        draft?.candidates?.find((c) => c?.id && c.id === draft?.selectedId) ||
+        draft?.candidates?.[0] ||
+        null;
+
+      if (!picked) return {};
+
+      return {
+        selected_conceptTitle: picked.conceptTitle,
+        selected_tagline: picked.tagline,
+        selected_conceptStatement: picked.conceptStatement,
+        selected_voice: picked.voice,
+        selected_keywords: Array.isArray(picked.keywords)
+          ? picked.keywords.join(", ")
+          : "",
+        selected_quickPitch: picked.quickPitch,
+        selected_doDont: picked.doDont,
+        selected_colorMood: picked.colorMood,
+        selected_heroImagery: picked.heroImagery,
+      };
+    },
     blocks: [
       {
-        title: "요약",
-        fields: ["companyName", "industry", "stage", "oneLine"],
-      },
-      {
-        title: "목적/타깃",
-        fields: ["siteGoal", "primaryAction", "targetCustomer"],
-      },
-      {
-        title: "콘텐츠/구성",
-        fields: ["mainSections", "keyContent", "productsServices", "pricing"],
-      },
-      {
-        title: "디자인/UX",
+        title: "입력 요약",
         fields: [
-          "styleTone",
-          "referenceSites",
-          "colorPref",
-          "colorAvoid",
-          "imagesAssets",
-          "devicePriority",
+          "brandName",
+          "category",
+          "stage",
+          "core_values",
+          "target",
+          "differentiation",
+          "tone_style",
+          "archetype",
+          "concept_vibe",
         ],
       },
-      { title: "기능/기술", fields: ["features", "integrations", "cms"] },
       {
-        title: "제약/일정/추가",
-        fields: ["constraints", "deadline", "budget", "website", "notes"],
+        title: "선택한 컨셉",
+        fields: [
+          "selected_conceptTitle",
+          "selected_tagline",
+          "selected_conceptStatement",
+          "selected_voice",
+          "selected_keywords",
+          "selected_quickPitch",
+        ],
+      },
+    ],
+    deepBlocks: [
+      {
+        title: "선택한 컨셉 상세",
+        fields: [
+          "selected_doDont",
+          "selected_colorMood",
+          "selected_heroImagery",
+        ],
       },
     ],
   },
@@ -297,14 +354,22 @@ export default function BrandConsultingResult({ onLogout }) {
 
   const draft = useMemo(() => {
     try {
-      const raw = localStorage.getItem(config.storageKey);
+      const raw =
+        localStorage.getItem(config.storageKey) ||
+        (config.storageKeyFallback
+          ? localStorage.getItem(config.storageKeyFallback)
+          : null);
       return raw ? JSON.parse(raw) : null;
     } catch {
       return null;
     }
   }, [config.storageKey]);
 
-  const form = draft?.form || {};
+  const baseForm = draft?.form || {};
+  const form = useMemo(() => {
+    const extra = config.enrichForm ? config.enrichForm(draft) : null;
+    return extra ? { ...baseForm, ...extra } : baseForm;
+  }, [draft]);
   const requiredKeys = config.requiredKeys;
 
   const requiredStatus = useMemo(() => {
