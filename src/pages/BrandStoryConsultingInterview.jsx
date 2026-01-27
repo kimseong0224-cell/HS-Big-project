@@ -178,7 +178,6 @@ function generateStoryCandidates(form, seed = 0) {
       : ["안도감"]
     ).join(" · ")}`;
 
-    // 플롯별 구조 차등
     if (plotType === "문제 해결형") {
       return {
         plot: plotType,
@@ -213,7 +212,6 @@ function generateStoryCandidates(form, seed = 0) {
       };
     }
 
-    // 탄생 신화형
     return {
       plot: plotType,
       story: [
@@ -248,10 +246,10 @@ function generateStoryCandidates(form, seed = 0) {
         ...(meta.emotions || []),
         "스토리",
         "브랜드",
+        companyName,
       ]),
     ).slice(0, 10);
 
-    // 약간 변주: 훅/엔딩 시드 반영
     const altHook = pick(hooks, variantSeed);
     const altEnd = pick(endings, variantSeed);
 
@@ -283,7 +281,6 @@ function generateStoryCandidates(form, seed = 0) {
 }
 
 const INITIAL_FORM = {
-  // ✅ 기업 진단에서 자동 반영(편집 X)
   companyName: "",
   industry: "",
   stage: "",
@@ -291,59 +288,34 @@ const INITIAL_FORM = {
   oneLine: "",
   targetCustomer: "",
 
-  // ✅ Step 4. 브랜드 스토리 (편집 O)
-  founding_story: "", // long
-  customer_transformation: "", // long
-  brand_mission: "", // long
-  story_plot: [], // multiple
-  customer_conflict: "", // long
-  story_emotion: [], // multiple
-  ultimate_goal: "", // long
+  founding_story: "",
+  customer_transformation: "",
+  brand_mission: "",
+  story_plot: [],
+  customer_conflict: "",
+  story_emotion: [],
+  ultimate_goal: "",
 
-  // 선택 메모
   notes: "",
 };
 
 export default function BrandStoryConsultingInterview({ onLogout }) {
   const navigate = useNavigate();
 
-  // ✅ 약관/방침 모달
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  // ✅ 폼 상태
   const [form, setForm] = useState(INITIAL_FORM);
 
-  // ✅ 저장 상태 UI
   const [saveMsg, setSaveMsg] = useState("");
   const [lastSaved, setLastSaved] = useState("-");
 
-  // ✅ 결과(후보/선택) 상태
   const [analyzing, setAnalyzing] = useState(false);
   const [candidates, setCandidates] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [regenSeed, setRegenSeed] = useState(0);
   const refResult = useRef(null);
 
-  // 섹션 ref
-  const refBasic = useRef(null);
-  const refMaterial = useRef(null);
-  const refStyle = useRef(null);
-  const refVision = useRef(null);
-  const refNotes = useRef(null);
-
-  const sections = useMemo(
-    () => [
-      { id: "basic", label: "기본 정보", ref: refBasic },
-      { id: "material", label: "스토리 재료", ref: refMaterial },
-      { id: "style", label: "플롯/감정", ref: refStyle },
-      { id: "vision", label: "미션/목표", ref: refVision },
-      { id: "notes", label: "추가 요청", ref: refNotes },
-    ],
-    [],
-  );
-
-  // ✅ 필수 항목(요청한 Step4 질문 기준)
   const requiredKeys = useMemo(
     () => [
       "founding_story",
@@ -382,17 +354,12 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
   const setValue = (key, value) =>
     setForm((prev) => ({ ...prev, [key]: value }));
 
-  const scrollToSection = (ref) => {
-    if (!ref?.current) return;
-    ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
   const scrollToResult = () => {
     if (!refResult?.current) return;
     refResult.current.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // ✅ draft 로드 (+ 간단한 구버전 필드 마이그레이션)
+  // draft 로드
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -404,7 +371,6 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
         setForm((prev) => {
           const next = { ...prev, ...loaded };
 
-          // 구버전 키가 남아있다면, 빈 값일 때만 최소 매핑
           if (
             !String(next.founding_story || "").trim() &&
             String(loaded.originStory || "").trim()
@@ -443,12 +409,10 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
         const d = new Date(parsed.updatedAt);
         if (!Number.isNaN(d.getTime())) setLastSaved(d.toLocaleString());
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
-  // ✅ 기업 진단&인터뷰 값 자동 반영
+  // 기업진단 자동 반영
   useEffect(() => {
     try {
       const diag = readDiagnosisForm();
@@ -488,12 +452,10 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
         oneLine: next.oneLine || prev.oneLine,
         targetCustomer: next.targetCustomer || prev.targetCustomer,
       }));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
-  // ✅ 결과 로드(후보/선택)
+  // 결과 로드
   useEffect(() => {
     try {
       const raw = localStorage.getItem(RESULT_KEY);
@@ -502,12 +464,10 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
       if (Array.isArray(parsed?.candidates)) setCandidates(parsed.candidates);
       if (parsed?.selectedId) setSelectedId(parsed.selectedId);
       if (typeof parsed?.regenSeed === "number") setRegenSeed(parsed.regenSeed);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
 
-  // ✅ 자동 저장(디바운스)
+  // 자동 저장
   useEffect(() => {
     setSaveMsg("");
     const t = setTimeout(() => {
@@ -516,9 +476,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
-      } catch {
-        // ignore
-      }
+      } catch {}
     }, 600);
 
     return () => clearTimeout(t);
@@ -537,11 +495,9 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
           updatedAt,
         }),
       );
-    } catch {
-      // ignore
-    }
+    } catch {}
 
-    // ✅ legacy 저장(통합 결과/결과 리포트 페이지 호환)
+    // legacy 저장
     try {
       const selected =
         nextCandidates.find((c) => c.id === nextSelectedId) || null;
@@ -556,9 +512,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
           updatedAt,
         }),
       );
-    } catch {
-      // ignore
-    }
+    } catch {}
   };
 
   const handleGenerateCandidates = async (mode = "generate") => {
@@ -606,9 +560,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(RESULT_KEY);
       localStorage.removeItem(LEGACY_KEY);
-    } catch {
-      // ignore
-    }
+    } catch {}
 
     const diag = (() => {
       try {
@@ -706,8 +658,8 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
 
           <div className="diagInterview__grid">
             <section className="diagInterview__left">
-              {/* 1) BASIC (자동 반영) */}
-              <div className="card" ref={refBasic}>
+              {/* 1) BASIC */}
+              <div className="card">
                 <div className="card__head">
                   <h2>1. 기본 정보 (자동 반영)</h2>
                   <p>
@@ -772,8 +724,8 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* 2) STORY MATERIAL */}
-              <div className="card" ref={refMaterial}>
+              {/* 2) MATERIAL */}
+              <div className="card">
                 <div className="card__head">
                   <h2>2. 스토리 재료</h2>
                   <p>
@@ -789,7 +741,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                   <textarea
                     value={form.founding_story}
                     onChange={(e) => setValue("founding_story", e.target.value)}
-                    placeholder="어떤 사건/불편/계기로 시작했나요? (구체적인 장면이 있을수록 좋아요)"
+                    placeholder="어떤 사건/불편/계기로 시작했나요?"
                     rows={5}
                   />
                 </div>
@@ -804,7 +756,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                     onChange={(e) =>
                       setValue("customer_conflict", e.target.value)
                     }
-                    placeholder="고객이 지금 막히는 지점은 무엇인가요? (시간/정보/비용/신뢰/습관 등)"
+                    placeholder="고객이 지금 막히는 지점은 무엇인가요?"
                     rows={5}
                   />
                 </div>
@@ -824,14 +776,11 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* 3) STYLE/EMOTION */}
-              <div className="card" ref={refStyle}>
+              {/* 3) STYLE */}
+              <div className="card">
                 <div className="card__head">
                   <h2>3. 원하는 플롯/감정</h2>
-                  <p>
-                    스토리텔링 스타일과 자극하고 싶은 감정을 선택하면, 같은
-                    재료도 더 설득력 있게 구성돼요.
-                  </p>
+                  <p>선택한 유형을 우선 반영해 후보를 만들어요.</p>
                 </div>
 
                 <div className="field">
@@ -839,8 +788,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                     원하는 스토리텔링 스타일 <span className="req">*</span>
                   </label>
                   <div className="hint" style={{ marginTop: 6 }}>
-                    여러 개 선택 가능 (선택한 유형을 우선 반영해 후보를
-                    만들어요)
+                    여러 개 선택 가능
                   </div>
                   <div style={{ marginTop: 10 }}>
                     <MultiChips
@@ -868,14 +816,10 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* 4) MISSION / ULTIMATE GOAL */}
-              <div className="card" ref={refVision}>
+              {/* 4) VISION */}
+              <div className="card">
                 <div className="card__head">
                   <h2>4. 미션/궁극적 목표</h2>
-                  <p>
-                    브랜드가 세상에 남기고 싶은 변화(미션)와 최종적으로 만들고
-                    싶은 세상을 정리합니다.
-                  </p>
                 </div>
 
                 <div className="field">
@@ -886,7 +830,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                   <textarea
                     value={form.brand_mission}
                     onChange={(e) => setValue("brand_mission", e.target.value)}
-                    placeholder="예) 누구나 더 쉽게, 더 안전하게, 더 확신 있게 결정할 수 있도록 돕는다"
+                    placeholder="예) 누구나 더 쉽게, 더 확신 있게 결정할 수 있도록 돕는다"
                     rows={5}
                   />
                 </div>
@@ -906,12 +850,9 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
               </div>
 
               {/* 5) NOTES */}
-              <div className="card" ref={refNotes}>
+              <div className="card">
                 <div className="card__head">
                   <h2>5. 추가 요청 (선택)</h2>
-                  <p>
-                    길이/문체/사용처 등 추가로 반영할 조건이 있으면 적어주세요.
-                  </p>
                 </div>
 
                 <div className="field">
@@ -925,7 +866,6 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 </div>
               </div>
 
-              {/* 결과 영역 */}
               <div ref={refResult} />
 
               {analyzing ? (
@@ -1091,7 +1031,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
               ) : null}
             </section>
 
-            {/* ✅ 오른쪽: 진행률 */}
+            {/* 오른쪽 사이드 카드 */}
             <aside className="diagInterview__right">
               <div className="sideCard">
                 <ConsultingFlowMini activeKey="story" />

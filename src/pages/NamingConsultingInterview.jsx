@@ -11,6 +11,7 @@ import ConsultingFlowMini from "../components/ConsultingFlowMini.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 파이프라인(단계 잠금/결과 저장)
 import {
   ensureStepAccess,
   readPipeline,
@@ -21,22 +22,66 @@ import {
   upsertPipeline,
 } from "../utils/brandPipelineStorage.js";
 
+// ✅ 백 연동(이미 프로젝트에 존재하는 클라이언트 사용)
+import { apiRequest } from "../api/client.js";
+
 const STORAGE_KEY = "namingConsultingInterviewDraft_v1";
 const RESULT_KEY = "namingConsultingInterviewResult_v1";
 const LEGACY_KEY = "brandInterview_naming_v1";
 
+/** ======================
+ *  질문 문장(텍스트) 포함 전송용 정의
+ *  - questionId: 고정 ID(백에서 저장/분석/로그에 사용)
+ *  - key: form의 필드명
+ *  ====================== */
+const NAMING_QUESTIONS = [
+  {
+    questionId: "naming_style",
+    questionText: "1. 선호 네이밍 스타일 (중복 선택 가능)",
+    key: "namingStyles",
+    answerType: "multi_select",
+  },
+  {
+    questionId: "language_pref",
+    questionText: "2. 언어 기반 (중복 선택 가능)",
+    key: "languagePrefs",
+    answerType: "multi_select",
+  },
+  {
+    questionId: "must_keywords",
+    questionText: "3. 꼭 담기거나 연상되었으면 하는 키워드 (선택)",
+    key: "mustHaveKeywords",
+    answerType: "text",
+  },
+  {
+    questionId: "brand_vibe",
+    questionText: "4. 이름에서 느껴져야 할 첫인상",
+    key: "brandVibe",
+    answerType: "text",
+  },
+  {
+    questionId: "avoid_style",
+    questionText: "5. 이런 느낌만은 피해주세요 (선택)",
+    key: "avoidStyle",
+    answerType: "text",
+  },
+  {
+    questionId: "domain_constraint",
+    questionText: "6. .com 도메인 확보가 필수인가요?",
+    key: "domainConstraint",
+    answerType: "single_select",
+  },
+  {
+    questionId: "target_emotion",
+    questionText: "7. 고객이 이름을 듣자마자 느꼈으면 하는 감정 1가지",
+    key: "targetEmotion",
+    answerType: "text",
+  },
+];
+
 function safeText(v, fallback = "") {
   const s = String(v ?? "").trim();
   return s ? s : fallback;
-}
-
-function pickKeywords(text, max = 8) {
-  const raw = String(text || "")
-    .split(/[,\n\t]/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const uniq = Array.from(new Set(raw));
-  return uniq.slice(0, max);
 }
 
 function stageLabel(v) {
@@ -54,170 +99,124 @@ function stageLabel(v) {
   return String(v);
 }
 
-/** ✅ 네이밍 후보 더미 생성(프론트 테스트용) */
-function generateNamingCandidates(form, seed = 0) {
-  const industry = safeText(form?.industry, "분야");
-  const target = safeText(form?.targetCustomer, "고객");
+function isFilled(v) {
+  if (Array.isArray(v)) return v.length > 0;
+  return Boolean(String(v ?? "").trim());
+}
 
-  const namingStyles = Array.isArray(form?.namingStyles)
-    ? form.namingStyles
-    : [];
-  const languagePrefs = Array.isArray(form?.languagePrefs)
-    ? form.languagePrefs
-    : [];
-  const brandVibe = safeText(form?.brandVibe, "좋은 첫인상");
-  const mustKws = pickKeywords(form?.mustHaveKeywords, 10);
-  const avoid = pickKeywords(form?.avoidStyle, 8);
-  const emotion = safeText(form?.targetEmotion, "신뢰");
-  const domainNeed = safeText(form?.domainConstraint, "Don't care");
-
-  const pick = (arr, idx) => arr[(idx + seed) % arr.length];
-
-  const baseRootsKo = [
-    "코어",
-    "루트",
-    "웨이브",
-    "스파크",
-    "포지",
-    "루프",
-    "플랜",
-    "브릿지",
-    "라이트",
-    "노바",
-  ];
-  const baseRootsEn = [
-    "Core",
-    "Root",
-    "Wave",
-    "Spark",
-    "Forge",
-    "Loop",
-    "Plan",
-    "Bridge",
-    "Bright",
-    "Nova",
-  ];
-
-  const mkKo = (prefix, root, suffix = "") =>
-    `${prefix}${root}${suffix}`.replace(/\s+/g, "");
-  const mkEn = (prefix, root, suffix = "") =>
-    `${prefix}${root}${suffix}`.replace(/\s+/g, "");
-
-  const getMode = () => {
-    const hasKo = languagePrefs.includes("Korean");
-    const hasEn = languagePrefs.includes("English");
-    const hasAny = languagePrefs.includes("Any");
-    if (hasAny || (hasKo && hasEn)) return "mix";
-    if (hasEn) return "en";
-    return "ko";
+/** ======================
+ *  백으로 보낼 payload 생성
+ *  - 질문 문장 포함 qa 배열
+ *  - answers는 백이 바로 쓰기 쉬운 평평한 형태
+ *  ====================== */
+function buildNamingPayload(
+  form,
+  { mode, regenSeed, brandId, diagnosisSummary },
+) {
+  const answers = {
+    namingStyles: Array.isArray(form.namingStyles) ? form.namingStyles : [],
+    languagePrefs: Array.isArray(form.languagePrefs) ? form.languagePrefs : [],
+    mustHaveKeywords: safeText(form.mustHaveKeywords, ""),
+    brandVibe: safeText(form.brandVibe, ""),
+    avoidStyle: safeText(form.avoidStyle, ""),
+    domainConstraint: safeText(form.domainConstraint, ""),
+    targetEmotion: safeText(form.targetEmotion, ""),
   };
 
-  const makeSamples = (mode) => {
-    const pKo = pick(["", "뉴", "프로", "메타", "브랜드"], 0);
-    const sKo = pick(["", "온", "랩", "웍스", "플랜"], 1);
-    const pEn = pick(["", "Neo", "Pro", "Meta", "Bright"], 0);
-    const sEn = pick(["", "ly", "io", "lab", "works"], 1);
+  const qa = NAMING_QUESTIONS.map((q) => ({
+    questionId: q.questionId,
+    questionText: q.questionText,
+    answerType: q.answerType,
+    answer: answers[q.key],
+  }));
 
-    const list = [];
-    const makeKoList = () => {
-      for (let i = 0; i < 6; i += 1)
-        list.push(mkKo(pKo, pick(baseRootsKo, i), sKo));
-    };
-    const makeEnList = () => {
-      for (let i = 0; i < 6; i += 1)
-        list.push(mkEn(pEn, pick(baseRootsEn, i), sEn));
-    };
+  return {
+    step: "naming",
+    mode, // "generate" | "regen"
+    regenSeed,
+    brandId: brandId || null,
 
-    if (mode === "en") makeEnList();
-    else if (mode === "ko") makeKoList();
-    else {
-      makeKoList();
-      makeEnList();
-    }
+    // ✅ 질문/답변
+    answers,
+    qa,
 
-    return Array.from(new Set(list)).slice(0, 8);
+    // ✅ 이전 단계 요약(네이밍은 기업진단 요약 기반)
+    diagnosisSummary: diagnosisSummary || null,
+
+    questionnaire: {
+      step: "naming",
+      version: "naming_v1",
+      locale: "ko-KR",
+    },
   };
+}
 
-  const mode = getMode();
-  const styleText =
-    namingStyles.length > 0 ? namingStyles.join(" · ") : "Style";
+/** ======================
+ *  백 응답 후보 normalize
+ *  - 백이 어떤 포맷을 주더라도 UI에서 쓰기 쉽게 3안 형태로 맞춤
+ *  ====================== */
+function normalizeNamingCandidates(raw) {
+  // 1) 이미 배열로 온 경우
+  const list = Array.isArray(raw)
+    ? raw
+    : raw?.candidates || raw?.data?.candidates || raw?.result?.candidates;
 
-  const commonKeywords = Array.from(
-    new Set([
-      emotion,
-      brandVibe,
-      ...mustKws.slice(0, 4),
-      ...namingStyles.slice(0, 3),
-    ]),
-  ).slice(0, 10);
+  if (!Array.isArray(list)) return [];
 
-  const samples = makeSamples(mode);
+  // 케이스 A: ["name1","name2","name3"] 문자열 배열
+  if (list.length && typeof list[0] === "string") {
+    return list.slice(0, 3).map((name, idx) => ({
+      id: `name_${idx + 1}`,
+      name: `안 ${idx + 1}`,
+      oneLiner: name,
+      keywords: [],
+      style: "",
+      samples: [name],
+      rationale: "",
+      checks: [],
+      avoid: [],
+    }));
+  }
 
-  const candidates = [
-    {
-      id: "nameA",
-      name: "A · 직관/설명형 중심",
-      oneLiner: "들으면 바로 이해되는, 설명력 있는 네이밍 방향",
-      keywords: Array.from(new Set(["Descriptive", ...commonKeywords])).slice(
-        0,
-        10,
-      ),
-      style: styleText,
-      samples: samples.slice(0, 6),
-      rationale: `업종(${industry})에서 ‘무슨 서비스인지’를 빠르게 전달하는 방향입니다. 타깃(${target})에게 첫인상(${brandVibe})을 우선으로 맞춥니다.`,
-      checks: [
-        "의미가 과도하게 길어지지 않게 길이 제한",
-        domainNeed === "Must have .com"
-          ? ".com 도메인 확보 가능성(사전 조사) 권장"
-          : "도메인 제약은 낮게 설정(상표/검색 중복 체크 권장)",
-      ],
-      avoid,
-    },
-    {
-      id: "nameB",
-      name: "B · 함축/상징형 중심",
-      oneLiner: "의미를 ‘한 단계’ 숨겨 기억에 남는 네이밍 방향",
-      keywords: Array.from(new Set(["Symbolic", ...commonKeywords])).slice(
-        0,
-        10,
-      ),
-      style: styleText,
-      samples: samples
-        .map((s) => (mode === "en" ? `Myth${s}` : `미스${s}`))
-        .slice(0, 6),
-      rationale: `브랜드 감정(${emotion})을 우선으로, 한 번 들으면 남는 ‘상징성’을 강화합니다. 소개 문구와 함께 쓰면 이해도도 보완됩니다.`,
-      checks: [
-        "서비스 오해가 없도록 서브카피/슬로건 병행 권장",
-        domainNeed === "Must have .com"
-          ? ".com 확보 가능성(사전 조사) 권장"
-          : "도메인 제약 낮음(검색 중복 체크 권장)",
-      ],
-      avoid,
-    },
-    {
-      id: "nameC",
-      name: "C · 합성/신조어형 중심",
-      oneLiner: "확장성과 고유성을 노리는 합성/신조어 네이밍 방향",
-      keywords: Array.from(new Set(["Abstract", ...commonKeywords])).slice(
-        0,
-        10,
-      ),
-      style: styleText,
-      samples: samples
-        .map((s) => (mode === "en" ? `${s}via` : `${s}비아`))
-        .slice(0, 6),
-      rationale: `고유성(검색/상표) 측면에서 유리한 방향입니다. 시장 확장 시에도 의미를 넓히기 쉽습니다.`,
-      checks: [
-        "발음 난이도/철자 혼동 점검",
-        domainNeed === "Must have .com"
-          ? ".com 확보 가능성(사전 조사) 권장"
-          : "도메인 제약 낮음(검색 중복 체크 권장)",
-      ],
-      avoid,
-    },
-  ];
+  // 케이스 B: [{id, title, names, reason ...}] 객체 배열
+  return list.slice(0, 3).map((item, idx) => {
+    const id = item.id || item.candidateId || `name_${idx + 1}`;
+    const title = item.name || item.title || item.label || `안 ${idx + 1}`;
 
-  return candidates.slice(0, 3);
+    // 샘플 네임: 다양한 키로 대응
+    const samples =
+      (Array.isArray(item.samples) && item.samples) ||
+      (Array.isArray(item.names) && item.names) ||
+      (Array.isArray(item.examples) && item.examples) ||
+      (item.oneLiner ? [item.oneLiner] : []);
+
+    const keywords =
+      (Array.isArray(item.keywords) && item.keywords) ||
+      (Array.isArray(item.tags) && item.tags) ||
+      [];
+
+    const checks =
+      (Array.isArray(item.checks) && item.checks) ||
+      (Array.isArray(item.notes) && item.notes) ||
+      [];
+
+    const avoid =
+      (Array.isArray(item.avoid) && item.avoid) ||
+      (Array.isArray(item.avoidList) && item.avoidList) ||
+      [];
+
+    return {
+      id,
+      name: title,
+      oneLiner: safeText(item.oneLiner || item.summary || "", ""),
+      keywords: keywords.slice(0, 10),
+      style: safeText(item.style || "", ""),
+      samples: samples.slice(0, 10),
+      rationale: safeText(item.rationale || item.reason || "", ""),
+      checks: checks.slice(0, 10),
+      avoid: avoid.slice(0, 10),
+    };
+  });
 }
 
 // ✅ 네이밍 질문 옵션
@@ -307,9 +306,7 @@ export default function NamingConsultingInterview({ onLogout }) {
   const requiredStatus = useMemo(() => {
     const status = {};
     requiredKeys.forEach((k) => {
-      const v = form?.[k];
-      if (Array.isArray(v)) status[k] = v.length > 0;
-      else status[k] = Boolean(String(v || "").trim());
+      status[k] = isFilled(form?.[k]);
     });
     return status;
   }, [form, requiredKeys]);
@@ -350,7 +347,9 @@ export default function NamingConsultingInterview({ onLogout }) {
     refResult.current.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // ✅ (중요) 단계 접근 가드 + 진단요약 pipeline 준비
+  /** ======================
+   *  (중요) 단계 접근 가드 + 진단요약 pipeline 준비
+   *  ====================== */
   useEffect(() => {
     // 1) pipeline에 diagnosisSummary가 없다면, diagnosis draft로 생성해서 넣어줌
     const p = readPipeline();
@@ -530,6 +529,11 @@ export default function NamingConsultingInterview({ onLogout }) {
     }
   };
 
+  /** ======================
+   *  ✅ 백 연동: 인터뷰 저장 + 네이밍 생성
+   *   - POST /brands/interview
+   *   - POST /brands/{brandId}/naming
+   *  ====================== */
   const handleGenerateCandidates = async (mode = "generate") => {
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
@@ -541,13 +545,92 @@ export default function NamingConsultingInterview({ onLogout }) {
       const nextSeed = mode === "regen" ? regenSeed + 1 : regenSeed;
       if (mode === "regen") setRegenSeed(nextSeed);
 
-      await new Promise((r) => setTimeout(r, 350));
-      const nextCandidates = generateNamingCandidates(form, nextSeed);
+      // pipeline에서 brandId / diagnosisSummary 확보
+      const p = readPipeline();
+      const diagnosisSummary =
+        p?.diagnosisSummary ||
+        (() => {
+          const diag = readDiagnosisDraftForm();
+          return diag ? buildDiagnosisSummaryFromDraft(diag) : null;
+        })();
+
+      let brandId =
+        p?.brandId ||
+        p?.brand?.id ||
+        p?.diagnosisResult?.brandId ||
+        p?.diagnosis?.brandId ||
+        null;
+
+      const payload = buildNamingPayload(form, {
+        mode,
+        regenSeed: nextSeed,
+        brandId,
+        diagnosisSummary,
+      });
+
+      // 1) 인터뷰 저장(질문문장 포함)
+      //    - 백에서 brandId를 내려줄 수도 있어(없다면 기존 pipeline brandId 사용)
+      try {
+        const interviewRes = await apiRequest("/brands/interview", {
+          method: "POST",
+          body: payload,
+        });
+
+        const maybeBrandId =
+          interviewRes?.brandId ||
+          interviewRes?.id ||
+          interviewRes?.data?.brandId ||
+          interviewRes?.data?.id ||
+          interviewRes?.result?.brandId ||
+          interviewRes?.result?.id ||
+          interviewRes?.brand?.id ||
+          null;
+
+        if (!brandId && maybeBrandId) {
+          brandId = maybeBrandId;
+          // pipeline에 brandId 저장(다음 단계에서도 사용)
+          try {
+            upsertPipeline({ brandId });
+          } catch {
+            // ignore
+          }
+        }
+      } catch (e) {
+        // 인터뷰 저장 실패는 치명적일 수 있지만, 상황에 따라 생성만 될 수도 있어 경고만
+        console.warn("POST /brands/interview failed:", e);
+      }
+
+      if (!brandId) {
+        alert(
+          "brandId를 확인할 수 없습니다. 기업진단 완료 후 생성된 brandId가 pipeline에 저장되어 있어야 합니다.",
+        );
+        return;
+      }
+
+      // 2) 네이밍 생성
+      const namingRes = await apiRequest(`/brands/${brandId}/naming`, {
+        method: "POST",
+        body: payload,
+      });
+
+      // 후보 normalize
+      const nextCandidates = normalizeNamingCandidates(namingRes);
+      if (!nextCandidates.length) {
+        alert(
+          "네이밍 후보를 받지 못했습니다. 백 응답 포맷(candidates)을 확인해주세요.",
+        );
+        return;
+      }
 
       setCandidates(nextCandidates);
       setSelectedId(null);
       persistResult(nextCandidates, null, nextSeed);
       scrollToResult();
+    } catch (error) {
+      console.error("Naming generate failed:", error);
+      alert(
+        "네이밍 생성 요청에 실패했습니다. 콘솔과 네트워크 탭을 확인해주세요.",
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -954,9 +1037,11 @@ export default function NamingConsultingInterview({ onLogout }) {
                               <div style={{ fontWeight: 900, fontSize: 15 }}>
                                 {c.name}
                               </div>
-                              <div style={{ marginTop: 6, opacity: 0.9 }}>
-                                {c.oneLiner}
-                              </div>
+                              {c.oneLiner ? (
+                                <div style={{ marginTop: 6, opacity: 0.9 }}>
+                                  {c.oneLiner}
+                                </div>
+                              ) : null}
                             </div>
                             <span
                               style={{
@@ -978,60 +1063,21 @@ export default function NamingConsultingInterview({ onLogout }) {
                             </span>
                           </div>
 
-                          <div style={{ marginTop: 10 }}>
-                            <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                              키워드
-                            </div>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 6,
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              {c.keywords.map((kw) => (
-                                <span
-                                  key={kw}
-                                  style={{
-                                    fontSize: 12,
-                                    fontWeight: 800,
-                                    padding: "4px 10px",
-                                    borderRadius: 999,
-                                    background: "rgba(0,0,0,0.04)",
-                                    border: "1px solid rgba(0,0,0,0.06)",
-                                    color: "rgba(0,0,0,0.75)",
-                                  }}
-                                >
-                                  #{kw}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: 10,
-                              fontSize: 13,
-                              opacity: 0.9,
-                            }}
-                          >
-                            <div>
-                              <b>스타일</b> · {c.style}
-                            </div>
-
-                            <div style={{ marginTop: 6 }}>
-                              <b>샘플</b>
+                          {c.keywords?.length ? (
+                            <div style={{ marginTop: 10 }}>
+                              <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                                키워드
+                              </div>
                               <div
                                 style={{
-                                  marginTop: 6,
                                   display: "flex",
-                                  flexWrap: "wrap",
                                   gap: 6,
+                                  flexWrap: "wrap",
                                 }}
                               >
-                                {c.samples.map((s) => (
+                                {c.keywords.map((kw) => (
                                   <span
-                                    key={s}
+                                    key={kw}
                                     style={{
                                       fontSize: 12,
                                       fontWeight: 800,
@@ -1042,19 +1088,68 @@ export default function NamingConsultingInterview({ onLogout }) {
                                       color: "rgba(0,0,0,0.75)",
                                     }}
                                   >
-                                    {s}
+                                    #{kw}
                                   </span>
                                 ))}
                               </div>
                             </div>
+                          ) : null}
 
-                            <div style={{ marginTop: 10, opacity: 0.85 }}>
-                              <b>근거</b> · {c.rationale}
-                            </div>
+                          <div
+                            style={{
+                              marginTop: 10,
+                              fontSize: 13,
+                              opacity: 0.9,
+                            }}
+                          >
+                            {c.style ? (
+                              <div>
+                                <b>스타일</b> · {c.style}
+                              </div>
+                            ) : null}
 
-                            <div style={{ marginTop: 8, opacity: 0.85 }}>
-                              <b>체크</b> · {c.checks.join(" · ")}
-                            </div>
+                            {c.samples?.length ? (
+                              <div style={{ marginTop: 6 }}>
+                                <b>샘플</b>
+                                <div
+                                  style={{
+                                    marginTop: 6,
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    gap: 6,
+                                  }}
+                                >
+                                  {c.samples.map((s) => (
+                                    <span
+                                      key={s}
+                                      style={{
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        padding: "4px 10px",
+                                        borderRadius: 999,
+                                        background: "rgba(0,0,0,0.04)",
+                                        border: "1px solid rgba(0,0,0,0.06)",
+                                        color: "rgba(0,0,0,0.75)",
+                                      }}
+                                    >
+                                      {s}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+
+                            {c.rationale ? (
+                              <div style={{ marginTop: 10, opacity: 0.85 }}>
+                                <b>근거</b> · {c.rationale}
+                              </div>
+                            ) : null}
+
+                            {c.checks?.length ? (
+                              <div style={{ marginTop: 8, opacity: 0.85 }}>
+                                <b>체크</b> · {c.checks.join(" · ")}
+                              </div>
+                            ) : null}
 
                             {c.avoid?.length ? (
                               <div style={{ marginTop: 8, opacity: 0.85 }}>

@@ -122,6 +122,31 @@
   background: rgba(245, 247, 255, 0.88);
 }
 
+/* ===== Locked / Hint ===== */
+.nav-dropdown__item.is-locked {
+  opacity: 0.55;
+  background: rgba(255, 255, 255, 0.38);
+  cursor: not-allowed;
+}
+
+.nav-dropdown__item.is-locked:hover {
+  background: rgba(255, 255, 255, 0.38);
+}
+
+.nav-dropdown__lock {
+  margin-left: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.nav-dropdown__hint {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(15, 23, 42, 0.55);
+  padding: 6px 10px 2px;
+  letter-spacing: 0.02em;
+}
+
 /* ✅ 섹션/바로가기(브랜드 드롭다운과 동일 스타일) */
 .nav-dropdown__divider {
   height: 1px;

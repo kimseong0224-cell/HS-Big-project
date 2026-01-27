@@ -1,5 +1,5 @@
 // src/components/SiteHeader.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/SiteHeader.css";
 
@@ -7,6 +7,11 @@ import "../styles/SiteHeader.css";
 // ✅ 팀 코드의 백 연동 방식으로 통일
 import { apiRequest, clearAccessToken } from "../api/client.js";
 import { clearCurrentUserId, clearIsLoggedIn } from "../api/auth.js";
+
+import {
+  ensureStepAccess,
+  readPipeline,
+} from "../utils/brandPipelineStorage.js";
 
 // (선택) 백에 logout API가 있으면 호출해도 되고, 없으면 안 불러도 됨.
 // 지금은 “토큰 없이” 연동이 목표라서 굳이 안 불러도 됨.
@@ -28,6 +33,15 @@ const BRAND_STEP_ROUTES = {
   concept: "/brand/concept/interview",
   story: "/brand/story",
   logo: "/brand/logo/interview",
+};
+
+const BRAND_RESULTS_ROUTE = "/mypage/brand-results";
+
+const BRAND_STEP_LABELS = {
+  naming: "네이밍",
+  concept: "컨셉",
+  story: "스토리",
+  logo: "로고",
 };
 
 const PROMO_INTERVIEW_ROUTES = {
@@ -72,6 +86,56 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
     pathname === "/investment" || pathname.startsWith("/investment/");
 
   const isActiveExact = (path) => pathname === path;
+
+  // ===== Brand Progress (for locking & 'Continue') =====
+  const pipeline = useMemo(() => readPipeline(), [pathname]);
+
+  const brandProgress = useMemo(() => {
+    const p = pipeline || {};
+    const hasDiagnosis = Boolean(
+      p?.diagnosisSummary?.companyName || p?.diagnosisSummary?.oneLine,
+    );
+    const hasNaming = Boolean(p?.naming?.selectedId || p?.naming?.selected);
+    const hasConcept = Boolean(p?.concept?.selectedId || p?.concept?.selected);
+    const hasStory = Boolean(p?.story?.selectedId || p?.story?.selected);
+    const hasLogo = Boolean(p?.logo?.selectedId || p?.logo?.selected);
+
+    const nextKey = !hasDiagnosis
+      ? "diagnosis"
+      : !hasNaming
+        ? "naming"
+        : !hasConcept
+          ? "concept"
+          : !hasStory
+            ? "story"
+            : !hasLogo
+              ? "logo"
+              : "done";
+
+    const nextRoute =
+      nextKey === "diagnosis"
+        ? "/diagnosis"
+        : nextKey === "done"
+          ? BRAND_RESULTS_ROUTE
+          : BRAND_STEP_ROUTES[nextKey];
+
+    return {
+      hasDiagnosis,
+      hasNaming,
+      hasConcept,
+      hasStory,
+      hasLogo,
+      nextKey,
+      nextRoute,
+    };
+  }, [pipeline]);
+
+  const brandContinueLabel = useMemo(() => {
+    if (brandProgress.nextKey === "diagnosis")
+      return "이어하기 · 기업진단 먼저";
+    if (brandProgress.nextKey === "done") return "완료 리포트 보기";
+    return `이어하기 · 다음: ${BRAND_STEP_LABELS[brandProgress.nextKey] || "다음 단계"}`;
+  }, [brandProgress.nextKey]);
 
   // ===== Hover Dropdown: Brand =====
   const [brandOpen, setBrandOpen] = useState(false);
@@ -143,9 +207,52 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
     if (typeof onBrandPick === "function" && pickKey) onBrandPick(pickKey);
   };
 
+  const BRAND_GUARD_MESSAGE = {
+    diagnosis_missing:
+      "브랜드 컨설팅을 시작하려면 기업진단을 먼저 완료해 주세요.",
+    naming_missing:
+      "이 단계는 네이밍 완료 후 진행할 수 있어요. 네이밍으로 이동합니다.",
+    concept_missing:
+      "이 단계는 컨셉 완료 후 진행할 수 있어요. 컨셉으로 이동합니다.",
+    story_missing:
+      "이 단계는 스토리 완료 후 진행할 수 있어요. 스토리로 이동합니다.",
+  };
+
+  const guardBrandStep = (stepKey) => {
+    const access = ensureStepAccess(stepKey);
+    if (access?.ok) return true;
+
+    const msg =
+      BRAND_GUARD_MESSAGE[access?.reason] ||
+      "이전 단계를 먼저 완료해 주세요. 해당 단계로 이동합니다.";
+
+    // ✅ 순서가 필요한 서비스라, 헤더에서 바로가기를 눌러도 '선행 단계'로 보내기
+    window.alert(msg);
+
+    closeAllMenus();
+    if (access?.redirectTo) navigate(access.redirectTo);
+    return false;
+  };
+
   const handleBrandStep = (stepKey) => {
+    if (!guardBrandStep(stepKey)) return;
     const to = BRAND_STEP_ROUTES[stepKey];
     handleBrandNavigate(to, stepKey);
+  };
+
+  const handleBrandContinue = () => {
+    closeAllMenus();
+    if (!brandProgress.nextRoute) return;
+
+    navigate(brandProgress.nextRoute);
+
+    // ✅ 브랜드 단계 이동일 때만 pick 콜백 호출(부모에서 진행 상태 표시 등에 사용 가능)
+    if (
+      typeof onBrandPick === "function" &&
+      ["naming", "concept", "story", "logo"].includes(brandProgress.nextKey)
+    ) {
+      onBrandPick(brandProgress.nextKey);
+    }
   };
 
   // ✅ 홍보물 컨설팅: 공용 네비게이션(소개/리포트)
@@ -269,7 +376,15 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
                 handleBrandNavigate(BRAND_STEP_ROUTES.home, "home")
               }
             >
-              브랜드 컨설팅 소개 및 홈
+              시작하기 / 소개 및 홈
+            </button>
+
+            <button
+              type="button"
+              className="nav-dropdown__item"
+              onClick={handleBrandContinue}
+            >
+              {brandContinueLabel}
             </button>
 
             <button
@@ -282,41 +397,112 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
               기업진단 리포트
             </button>
 
+            <button
+              type="button"
+              className="nav-dropdown__item"
+              onClick={() =>
+                handleBrandNavigate(BRAND_RESULTS_ROUTE, "results")
+              }
+            >
+              내 리포트 (브랜드)
+            </button>
+
             <div className="nav-dropdown__divider" aria-hidden="true" />
 
             <div className="nav-dropdown__section-title">단계 바로가기</div>
             <div className="nav-dropdown__grid" role="none">
               <button
                 type="button"
-                className="nav-dropdown__item nav-dropdown__item--mini"
+                className={`nav-dropdown__item nav-dropdown__item--mini ${
+                  brandProgress.hasDiagnosis ? "" : "is-locked"
+                }`}
+                aria-disabled={brandProgress.hasDiagnosis ? "false" : "true"}
                 onClick={() => handleBrandStep("naming")}
               >
                 네이밍
+                {!brandProgress.hasDiagnosis && (
+                  <span className="nav-dropdown__lock">🔒</span>
+                )}
               </button>
 
               <button
                 type="button"
-                className="nav-dropdown__item nav-dropdown__item--mini"
+                className={`nav-dropdown__item nav-dropdown__item--mini ${
+                  brandProgress.hasDiagnosis && brandProgress.hasNaming
+                    ? ""
+                    : "is-locked"
+                }`}
+                aria-disabled={
+                  brandProgress.hasDiagnosis && brandProgress.hasNaming
+                    ? "false"
+                    : "true"
+                }
                 onClick={() => handleBrandStep("concept")}
               >
                 컨셉
+                {!(brandProgress.hasDiagnosis && brandProgress.hasNaming) && (
+                  <span className="nav-dropdown__lock">🔒</span>
+                )}
               </button>
 
               <button
                 type="button"
-                className="nav-dropdown__item nav-dropdown__item--mini"
+                className={`nav-dropdown__item nav-dropdown__item--mini ${
+                  brandProgress.hasDiagnosis &&
+                  brandProgress.hasNaming &&
+                  brandProgress.hasConcept
+                    ? ""
+                    : "is-locked"
+                }`}
+                aria-disabled={
+                  brandProgress.hasDiagnosis &&
+                  brandProgress.hasNaming &&
+                  brandProgress.hasConcept
+                    ? "false"
+                    : "true"
+                }
                 onClick={() => handleBrandStep("story")}
               >
                 스토리
+                {!(
+                  brandProgress.hasDiagnosis &&
+                  brandProgress.hasNaming &&
+                  brandProgress.hasConcept
+                ) && <span className="nav-dropdown__lock">🔒</span>}
               </button>
 
               <button
                 type="button"
-                className="nav-dropdown__item nav-dropdown__item--mini"
+                className={`nav-dropdown__item nav-dropdown__item--mini ${
+                  brandProgress.hasDiagnosis &&
+                  brandProgress.hasNaming &&
+                  brandProgress.hasConcept &&
+                  brandProgress.hasStory
+                    ? ""
+                    : "is-locked"
+                }`}
+                aria-disabled={
+                  brandProgress.hasDiagnosis &&
+                  brandProgress.hasNaming &&
+                  brandProgress.hasConcept &&
+                  brandProgress.hasStory
+                    ? "false"
+                    : "true"
+                }
                 onClick={() => handleBrandStep("logo")}
               >
                 로고
+                {!(
+                  brandProgress.hasDiagnosis &&
+                  brandProgress.hasNaming &&
+                  brandProgress.hasConcept &&
+                  brandProgress.hasStory
+                ) && <span className="nav-dropdown__lock">🔒</span>}
               </button>
+            </div>
+
+            <div className="nav-dropdown__hint">
+              🔒 이전 단계 완료 시 다음 단계가 열립니다.
             </div>
           </div>
         </div>

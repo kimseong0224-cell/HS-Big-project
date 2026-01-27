@@ -52,9 +52,27 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// ✅ 에러 메시지 통일
+// ✅ 응답에서 토큰 갱신 + 에러 메시지 통일
 apiClient.interceptors.response.use(
-  (res) => res,
+  (response) => {
+    // axios는 기본적으로 header key를 소문자로 내려줌
+    const authHeader =
+      response?.headers?.authorization ||
+      response?.headers?.Authorization ||
+      response?.headers?.["access-token"] ||
+      response?.headers?.["x-access-token"];
+
+    if (authHeader) {
+      const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+      const token =
+        typeof raw === "string" && raw.startsWith("Bearer ")
+          ? raw.slice(7)
+          : raw;
+      if (token) setAccessToken(token);
+    }
+
+    return response;
+  },
   (error) => {
     const msg =
       error?.response?.data?.message ||

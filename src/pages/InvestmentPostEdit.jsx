@@ -162,7 +162,28 @@ export default function InvestmentPostEdit({ onLogout }) {
         setLogoPreview(data.logoImageUrl || "");
       } catch (error) {
         console.error(error);
-        if (mounted) setNotFound(true);
+        const status = error?.response?.status;
+        if (!mounted) return;
+
+        if (status === 403) {
+          alert("수정 권한이 없습니다.");
+          navigate(-1);
+          return;
+        }
+
+        if (status === 404) {
+          setNotFound(true);
+          return;
+        }
+
+        alert(
+          error?.userMessage
+            ? `${error.userMessage}${status ? ` (에러코드: ${status})` : ""}`
+            : status
+              ? `오류가 발생했습니다. (에러코드: ${status})`
+              : "오류가 발생했습니다.",
+        );
+        setNotFound(true);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -216,7 +237,13 @@ export default function InvestmentPostEdit({ onLogout }) {
       navigate("/investment");
     } catch (error) {
       console.error(error);
-      setSubmitError("게시글 수정에 실패했습니다.");
+      const status = error?.response?.status;
+      if (status === 403) {
+        alert("수정 권한이 없습니다.");
+        navigate(-1);
+        return;
+      }
+      setSubmitError(error?.userMessage || "게시글 수정에 실패했습니다.");
     } finally {
       setLoading(false);
     }
@@ -227,8 +254,19 @@ export default function InvestmentPostEdit({ onLogout }) {
     if (!ok) return;
     try {
       await apiRequest(`/brands/posts/${id}`, { method: "DELETE" });
+      alert("삭제되었습니다.");
     } catch (error) {
       console.error(error);
+      const status = error?.response?.status;
+      if (status === 403) {
+        alert("삭제 권한이 없습니다.");
+        return;
+      }
+      alert(
+        error?.userMessage ||
+          "삭제에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      );
+      return;
     }
     navigate("/investment");
   };

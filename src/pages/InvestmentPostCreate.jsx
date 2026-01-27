@@ -88,6 +88,31 @@ export default function InvestmentPostCreate({ onLogout }) {
     reader.readAsDataURL(file);
   };
 
+  // ✅ 임시저장/불러오기에서 logoPreview가 dataURL인 경우,
+  //    실제 파일 선택 없이도 multipart "image"로 전송 가능하게 변환
+  const dataUrlToBlob = (dataUrl) => {
+    if (!dataUrl || typeof dataUrl !== "string") return null;
+    if (!dataUrl.startsWith("data:")) return null;
+
+    const parts = dataUrl.split(",");
+    if (parts.length < 2) return null;
+
+    const meta = parts[0];
+    const base64 = parts[1];
+    const match = meta.match(/data:(.*);base64/);
+    const mime = match?.[1] || "image/png";
+
+    try {
+      const binary = atob(base64);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: mime });
+    } catch {
+      return null;
+    }
+  };
+
   const toggleLocation = (value) => {
     setForm((prev) => {
       const exists = prev.locations.includes(value);
@@ -159,7 +184,12 @@ export default function InvestmentPostCreate({ onLogout }) {
       "data",
       new Blob([JSON.stringify(payload)], { type: "application/json" }),
     );
-    if (logoFile) formData.append("image", logoFile);
+    if (logoFile) {
+      formData.append("image", logoFile);
+    } else {
+      const draftBlob = dataUrlToBlob(logoPreview);
+      if (draftBlob) formData.append("image", draftBlob, "draft-logo.png");
+    }
 
     try {
       await apiRequest("/brands/posts", {
