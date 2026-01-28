@@ -1,5 +1,12 @@
 // src/App.jsx
-import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import {
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
@@ -38,8 +45,49 @@ import InvestmentPostEdit from "./pages/InvestmentPostEdit.jsx";
 
 import ChatbotWidget from "./components/ChatbotWidget.jsx";
 
+import {
+  abortBrandFlow,
+  isBrandFlowActive,
+  isBrandFlowRoute,
+} from "./utils/brandPipelineStorage.js";
+
 export default function App() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const prevPathRef = useRef(pathname);
+
+  // ✅ 브랜드 컨설팅(네이밍~로고) 진행 중 이탈 방지 + 이탈 시 네이밍부터 리셋
+  useEffect(() => {
+    const prev = prevPathRef.current;
+    if (prev === pathname) return;
+
+    const leavingFlow = isBrandFlowRoute(prev) && !isBrandFlowRoute(pathname);
+
+    if (leavingFlow && isBrandFlowActive()) {
+      const ok = window.confirm(
+        "브랜드 컨설팅이 진행 중입니다. 지금 나가면 진행 내용이 초기화되며, 다시 시작하면 네이밍부터 진행됩니다.\n\n정말 나가시겠어요?",
+      );
+
+      if (!ok) {
+        // ✅ 즉시 원래 단계로 복귀(이탈 취소)
+        navigate(prev, { replace: true });
+        return;
+      }
+
+      // ✅ 이탈 확정 → 단계 결과 삭제(네이밍부터)
+      try {
+        abortBrandFlow("leave_route");
+      } catch {
+        // ignore
+      }
+
+      window.alert(
+        "진행이 초기화되었습니다. 다음에 다시 시작하면 네이밍부터 진행됩니다.",
+      );
+    }
+
+    prevPathRef.current = pathname;
+  }, [pathname, navigate]);
 
   // ✅ 로그인/회원가입 관련 페이지에서는 숨김
   const hideChatbotPaths = [

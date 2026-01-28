@@ -1,5 +1,10 @@
 // src/utils/brandPipelineStorage.js
-import { userGetItem, userSetItem, userRemoveItem, userSafeParse } from "./userLocalStorage.js";
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+  userSafeParse,
+} from "./userLocalStorage.js";
 
 export const PIPELINE_KEY = "brandPipeline_v1";
 const DIAG_KEYS = ["diagnosisInterviewDraft_v1", "diagnosisInterviewDraft"];
@@ -345,4 +350,250 @@ export function migrateLegacyToPipelineIfNeeded() {
 
   if (changed) writePipeline(next);
   return readPipeline();
+}
+
+/** =========================
+ * ✅ Strict Brand Flow (네이밍 → 컨셉 → 스토리 → 로고)
+ * - brandId 고정
+ * - 진행 중 이탈 시: 네이밍부터 다시(단계 결과 초기화)
+ * - 진행 중 이전 단계로 되돌아가기 차단
+ * ========================= */
+
+export const BRAND_FLOW_STEPS = ["naming", "concept", "story", "logo"];
+
+const BRAND_FLOW_STEP_INDEX = {
+  naming: 0,
+  concept: 1,
+  story: 2,
+  logo: 3,
+};
+
+const BRAND_FLOW_ROUTE_BY_STEP = {
+  naming: "/brand/naming/interview",
+  concept: "/brand/concept/interview",
+  story: "/brand/story",
+  logo: "/brand/logo/interview",
+};
+
+export function getBrandFlow() {
+  const p = readPipeline();
+  return p?.brandFlow || null;
+}
+
+export function isBrandFlowActive() {
+  const f = getBrandFlow();
+  return Boolean(f?.active);
+}
+
+export function getBrandFlowCurrentStep() {
+  const f = getBrandFlow();
+  const cur = String(f?.currentStep || "naming");
+  return BRAND_FLOW_STEP_INDEX[cur] != null ? cur : "naming";
+}
+
+export function getBrandFlowRouteForStep(stepKey) {
+  return BRAND_FLOW_ROUTE_BY_STEP[stepKey] || "/brand/naming/interview";
+}
+
+/**
+ * ✅ 브랜드 4종(네이밍/컨셉/스토리/로고) 진행 라우트인지 판별
+ */
+export function isBrandFlowRoute(pathname) {
+  const p = String(pathname || "");
+  if (!p) return false;
+
+  // canonical
+  if (p === "/brand/naming/interview") return true;
+  if (p === "/brand/concept/interview") return true;
+  if (p === "/brand/story" || p === "/brand/story/interview") return true;
+  if (p === "/brand/logo/interview") return true;
+
+  // legacy aliases (App.jsx 유지)
+  if (p === "/nameconsulting" || p === "/namingconsulting") return true;
+  if (p === "/conceptconsulting" || p === "/homepageconsulting") return true;
+  if (p === "/brand/homepage/interview") return true;
+  if (p === "/brandstoryconsulting") return true;
+  if (p === "/logoconsulting") return true;
+
+  return false;
+}
+
+/**
+ * ✅ 진행 중 새로고침/탭닫기 등을 감지했을 때 표시(다음 진입 시 네이밍부터 리셋)
+ */
+export function markBrandFlowPendingAbort(reason = "interrupted") {
+  const cur = readPipeline();
+  const flow = cur?.brandFlow || {};
+  if (!flow?.active) return cur;
+
+  const next = {
+    ...cur,
+    brandFlow: {
+      ...flow,
+      pendingAbort: true,
+      pendingReason: String(reason || "interrupted"),
+      updatedAt: Date.now(),
+    },
+    updatedAt: Date.now(),
+  };
+  return writePipeline(next);
+}
+
+/**
+ * ✅ pendingAbort가 있으면 1회 소비하면서 true 반환
+ * - 페이지에서 alert 문구를 띄운 뒤, 네이밍부터 다시 시작하도록 유도
+ */
+export function consumeBrandFlowPendingAbort() {
+  const cur = readPipeline();
+  const flow = cur?.brandFlow;
+  if (!flow?.active || !flow?.pendingAbort) return false;
+
+  // pendingAbort를 소비(해제)
+  const next = {
+    ...cur,
+    brandFlow: {
+      ...flow,
+      pendingAbort: false,
+      pendingReason: null,
+      updatedAt: Date.now(),
+    },
+    updatedAt: Date.now(),
+  };
+  writePipeline(next);
+  return true;
+}
+
+/**
+ * ✅ 진단 완료 후 "브랜드 컨설팅 시작" 시 호출
+ * - 단계 결과 초기화(네이밍부터)
+ * - brandFlow 활성화 + currentStep=naming
+ */
+export function startBrandFlow({ brandId } = {}) {
+  // 1) 단계 결과 초기화(진단/brandId는 유지)
+  const cleared = clearStepsFrom("naming");
+
+  const normalized =
+    brandId == null
+      ? null
+      : Number.isNaN(Number(brandId))
+        ? brandId
+        : Number(brandId);
+
+  const next = {
+    ...cleared,
+    ...(normalized != null ? { brandId: normalized } : {}),
+    brandFlow: {
+      active: true,
+      currentStep: "naming",
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+      pendingAbort: false,
+      pendingReason: null,
+    },
+    updatedAt: Date.now(),
+  };
+
+  return writePipeline(next);
+}
+
+/**
+ * ✅ 현재 단계 갱신(이전 단계로 못 돌아가게 만드는 기준)
+ */
+export function setBrandFlowCurrent(stepKey) {
+  const key = String(stepKey || "naming");
+  const normalized = BRAND_FLOW_STEP_INDEX[key] != null ? key : "naming";
+
+  const cur = readPipeline();
+  const flow = cur?.brandFlow || {};
+
+  // flow가 없으면 자동으로 생성(진단 이후 직접 단계 진입했을 때)
+  const next = {
+    ...cur,
+    brandFlow: {
+      active: true,
+      currentStep: normalized,
+      startedAt: flow?.startedAt || Date.now(),
+      updatedAt: Date.now(),
+      pendingAbort: false,
+      pendingReason: null,
+    },
+    updatedAt: Date.now(),
+  };
+  return writePipeline(next);
+}
+
+/**
+ * ✅ 진행 중 이탈(메뉴 이동/다른 페이지 이동/뒤로가기 등) 시
+ * - 네이밍부터 다시 시작하도록 단계 결과를 삭제
+ * - brandFlow 비활성화
+ */
+export function abortBrandFlow(reason = "leave") {
+  const cleared = clearStepsFrom("naming");
+  const cur = readPipeline(); // clearStepsFrom 이후 최신값
+  const flow = cur?.brandFlow || {};
+
+  const next = {
+    ...cleared,
+    brandFlow: {
+      ...flow,
+      active: false,
+      currentStep: "naming",
+      pendingAbort: false,
+      pendingReason: null,
+      abortedAt: Date.now(),
+      abortReason: String(reason || "leave"),
+      updatedAt: Date.now(),
+    },
+    updatedAt: Date.now(),
+  };
+  return writePipeline(next);
+}
+
+/**
+ * ✅ 로고까지 완료 후 종료 처리(이탈 경고/리셋 방지)
+ */
+export function completeBrandFlow() {
+  const cur = readPipeline();
+  const flow = cur?.brandFlow || {};
+  const next = {
+    ...cur,
+    brandFlow: {
+      ...flow,
+      active: false,
+      completedAt: Date.now(),
+      updatedAt: Date.now(),
+    },
+    updatedAt: Date.now(),
+  };
+  return writePipeline(next);
+}
+
+/**
+ * ✅ Strict 접근 가드(순서 + 이전 단계 되돌아가기 차단)
+ */
+export function ensureStrictStepAccess(stepKey) {
+  // 1) 기본 순서 가드(진단/선행 단계)
+  const base = ensureStepAccess(stepKey);
+  if (!base?.ok) return base;
+
+  // 2) 진행 중 이전 단계 진입 차단
+  const cur = readPipeline();
+  const flow = cur?.brandFlow;
+
+  if (flow?.active) {
+    const curStep = getBrandFlowCurrentStep();
+    const want = String(stepKey || "naming");
+    const wantStep = BRAND_FLOW_STEP_INDEX[want] != null ? want : "naming";
+
+    if (BRAND_FLOW_STEP_INDEX[wantStep] < BRAND_FLOW_STEP_INDEX[curStep]) {
+      return {
+        ok: false,
+        redirectTo: getBrandFlowRouteForStep(curStep),
+        reason: "no_back",
+        currentStep: curStep,
+      };
+    }
+  }
+
+  return { ok: true };
 }

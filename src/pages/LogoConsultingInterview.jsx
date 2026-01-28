@@ -12,7 +12,22 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
 // ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
-import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+} from "../utils/userLocalStorage.js";
+
+import {
+  ensureStrictStepAccess,
+  setBrandFlowCurrent,
+  markBrandFlowPendingAbort,
+  consumeBrandFlowPendingAbort,
+  abortBrandFlow,
+  setStepResult,
+  clearStepsFrom,
+  completeBrandFlow,
+} from "../utils/brandPipelineStorage.js";
 
 const STORAGE_KEY = "logoConsultingInterviewDraft_v1";
 const RESULT_KEY = "logoConsultingInterviewResult_v1";
@@ -272,6 +287,54 @@ const INITIAL_FORM = {
 export default function LogoConsultingInterview({ onLogout }) {
   const navigate = useNavigate();
 
+  // ✅ Strict Flow 가드(로고 단계) + 이탈/새로고침 처리
+  useEffect(() => {
+    try {
+      const hadPending = consumeBrandFlowPendingAbort();
+      if (hadPending) {
+        abortBrandFlow("interrupted");
+        window.alert(
+          "브랜드 컨설팅 진행이 중단되어, 네이밍부터 다시 시작합니다.",
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    const guard = ensureStrictStepAccess("logo");
+    if (!guard.ok) {
+      const msg =
+        guard?.reason === "no_back"
+          ? "이전 단계로는 돌아갈 수 없습니다. 현재 진행 중인 단계에서 계속 진행해 주세요."
+          : "이전 단계를 먼저 완료해 주세요.";
+      window.alert(msg);
+      navigate(guard.redirectTo || "/brand/story", { replace: true });
+      return;
+    }
+
+    try {
+      setBrandFlowCurrent("logo");
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ 새로고침/탭닫기 경고 + 다음 진입 시 네이밍부터 리셋
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      try {
+        markBrandFlowPendingAbort("beforeunload");
+      } catch {
+        // ignore
+      }
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
   // ✅ 약관/방침 모달
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
@@ -520,6 +583,21 @@ export default function LogoConsultingInterview({ onLogout }) {
     } catch {
       // ignore
     }
+
+    // ✅ pipeline 저장(로고 단계 결과)
+    try {
+      const selected =
+        nextCandidates.find((c) => c.id === nextSelectedId) || null;
+      setStepResult("logo", {
+        candidates: nextCandidates,
+        selectedId: nextSelectedId,
+        selected,
+        regenSeed: nextSeed,
+        updatedAt,
+      });
+    } catch {
+      // ignore
+    }
   };
 
   const handleGenerateCandidates = async (mode = "generate") => {
@@ -555,6 +633,11 @@ export default function LogoConsultingInterview({ onLogout }) {
   };
 
   const handleFinish = () => {
+    try {
+      completeBrandFlow();
+    } catch {
+      // ignore
+    }
     navigate("/mypage/brand-results");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -567,6 +650,14 @@ export default function LogoConsultingInterview({ onLogout }) {
       userRemoveItem(STORAGE_KEY);
       userRemoveItem(RESULT_KEY);
       userRemoveItem(LEGACY_KEY);
+    } catch {
+      // ignore
+    }
+
+    // ✅ pipeline에서도 현재 단계(로고) 초기화
+    try {
+      clearStepsFrom("logo");
+      setBrandFlowCurrent("logo");
     } catch {
       // ignore
     }

@@ -1,6 +1,6 @@
 // src/pages/NamingConsultingInterview.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import SiteHeader from "../components/SiteHeader.jsx";
 import SiteFooter from "../components/SiteFooter.jsx";
@@ -20,13 +20,18 @@ import {
 
 // ✅ 파이프라인(단계 잠금/결과 저장)
 import {
-  ensureStepAccess,
+  ensureStrictStepAccess,
   readPipeline,
   setStepResult,
   clearStepsFrom,
   readDiagnosisDraftForm,
   buildDiagnosisSummaryFromDraft,
   upsertPipeline,
+  startBrandFlow,
+  setBrandFlowCurrent,
+  markBrandFlowPendingAbort,
+  consumeBrandFlowPendingAbort,
+  abortBrandFlow,
 } from "../utils/brandPipelineStorage.js";
 
 // ✅ 백 연동(이미 프로젝트에 존재하는 클라이언트 사용)
@@ -296,6 +301,7 @@ const INITIAL_FORM = {
 
 export default function NamingConsultingInterview({ onLogout }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // ✅ 약관/방침 모달
   const [openType, setOpenType] = useState(null);
@@ -384,28 +390,83 @@ export default function NamingConsultingInterview({ onLogout }) {
   };
 
   /** ======================
-   *  (중요) 단계 접근 가드 + 진단요약 pipeline 준비
+   *  (중요) Strict Flow 가드 + brandId/진단요약 pipeline 준비
    *  ====================== */
   useEffect(() => {
-    // 1) pipeline에 diagnosisSummary가 없다면, diagnosis draft로 생성해서 넣어줌
-    const p = readPipeline();
-    if (!p?.diagnosisSummary) {
-      const diag = readDiagnosisDraftForm();
-      if (diag) {
-        const summary = buildDiagnosisSummaryFromDraft(diag);
-        upsertPipeline({ diagnosisSummary: summary });
+    // ✅ 새로고침/탭닫기 등으로 진행이 끊겼다면: 네이밍부터 다시
+    try {
+      const hadPending = consumeBrandFlowPendingAbort();
+      if (hadPending) {
+        abortBrandFlow("interrupted");
+        window.alert(
+          "브랜드 컨설팅 진행이 중단되어, 네이밍부터 다시 시작합니다.",
+        );
       }
+    } catch {
+      // ignore
     }
 
-    // 2) 네이밍 단계 접근 가능 여부 체크
-    const guard = ensureStepAccess("naming");
+    // ✅ state로 넘어온 brandId가 있으면 pipeline에 고정 저장(brandId 섞임 방지)
+    try {
+      const stateBrandId = location?.state?.brandId ?? null;
+      if (stateBrandId != null) {
+        const n = Number(stateBrandId);
+        upsertPipeline({ brandId: Number.isNaN(n) ? stateBrandId : n });
+      }
+    } catch {
+      // ignore
+    }
+
+    // ✅ pipeline에 diagnosisSummary가 없다면, diagnosis draft로 생성해서 넣어줌
+    try {
+      const p = readPipeline();
+      if (!p?.diagnosisSummary) {
+        const diag = readDiagnosisDraftForm();
+        if (diag) {
+          const summary = buildDiagnosisSummaryFromDraft(diag);
+          upsertPipeline({ diagnosisSummary: summary });
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // ✅ 네이밍 단계 접근 가능 여부 체크(Strict)
+    const guard = ensureStrictStepAccess("naming");
     if (!guard.ok) {
-      alert(
-        "브랜드 컨설팅은 기업진단 요약을 기반으로 진행됩니다. 기업진단을 먼저 완료해주세요.",
-      );
-      navigate(guard.redirectTo || "/diagnosis");
+      const msg =
+        guard?.reason === "no_back"
+          ? "이전 단계로는 돌아갈 수 없습니다. 현재 진행 중인 단계에서 계속 진행해 주세요."
+          : "브랜드 컨설팅은 기업진단 요약을 기반으로 진행됩니다. 기업진단을 먼저 완료해 주세요.";
+      window.alert(msg);
+      navigate(guard.redirectTo || "/diagnosis", { replace: true });
+      return;
+    }
+
+    // ✅ flow 활성화 + currentStep 고정
+    try {
+      const p = readPipeline();
+      startBrandFlow({ brandId: p?.brandId });
+      setBrandFlowCurrent("naming");
+    } catch {
+      // ignore
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ 새로고침/탭닫기 경고 + 다음 진입 시 네이밍부터 리셋
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      try {
+        markBrandFlowPendingAbort("beforeunload");
+      } catch {
+        // ignore
+      }
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
   // ✅ draft 로드
@@ -622,16 +683,14 @@ export default function NamingConsultingInterview({ onLogout }) {
           interviewRes?.brand?.id ||
           null;
 
-        // ✅ 백이 brandId를 내려주면 항상 그 값을 우선 사용 (계정 변경/스토리지 꼬임 방지)
-        if (maybeBrandId) {
+        // ✅ brandId는 '고정' (이미 있으면 덮어쓰지 않음)
+        if (!brandId && maybeBrandId) {
           const normalized = Number(maybeBrandId);
-          if (!Number.isNaN(normalized)) {
-            brandId = normalized;
-            try {
-              upsertPipeline({ brandId });
-            } catch {
-              // ignore
-            }
+          brandId = Number.isNaN(normalized) ? maybeBrandId : normalized;
+          try {
+            upsertPipeline({ brandId });
+          } catch {
+            // ignore
           }
         }
       } catch (e) {
@@ -700,8 +759,68 @@ export default function NamingConsultingInterview({ onLogout }) {
     persistResult(candidates, id, regenSeed);
   };
 
-  const handleGoNext = () => {
+  const handleGoNext = async () => {
     if (!canGoNext) return;
+
+    // ✅ 백 단계 진행을 위해 선택값을 저장(네이밍 -> 컨셉 단계로 이동)
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    const selected =
+      candidates.find((c) => c.id === selectedId) ||
+      candidates.find((c) => c.id === (selectedId || "")) ||
+      null;
+
+    const selectedName =
+      selected?.samples?.[0] ||
+      selected?.oneLiner ||
+      selected?.title ||
+      selected?.name ||
+      "";
+
+    if (!brandId) {
+      alert("brandId를 확인할 수 없습니다. 기업진단을 다시 진행해 주세요.");
+      return;
+    }
+    if (!String(selectedName).trim()) {
+      alert("선택된 네이밍을 찾을 수 없습니다. 후보를 다시 선택해 주세요.");
+      return;
+    }
+
+    try {
+      await apiRequest(`/brands/${brandId}/naming/select`, {
+        method: "POST",
+        data: { selectedByUser: String(selectedName) },
+      });
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message || e?.userMessage || e?.message || "";
+
+      console.warn("POST /brands/{brandId}/naming/select failed:", e);
+
+      // ✅ 401/403: 인증/권한 문제(토큰 만료, 다른 사람 brandId 접근 등)
+      if (status === 401 || status === 403) {
+        alert(
+          status === 401
+            ? "로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요."
+            : "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      // 이미 단계가 넘어간 경우(예: 재진입)에는 다음으로 진행 허용
+      if (!String(msg).includes("네이밍 단계")) {
+        alert(`네이밍 선택 저장에 실패했습니다: ${msg || "요청 실패"}`);
+        return;
+      }
+    }
+
     navigate("/brand/concept/interview");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };

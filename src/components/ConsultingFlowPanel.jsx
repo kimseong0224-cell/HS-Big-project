@@ -2,7 +2,10 @@ import React, { useMemo, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import "../styles/ConsultingFlowPanel.css";
-import { readPipeline } from "../utils/brandPipelineStorage.js";
+import {
+  readPipeline,
+  ensureStrictStepAccess,
+} from "../utils/brandPipelineStorage.js";
 
 function safeReadPipeline() {
   try {
@@ -93,6 +96,18 @@ export default function ConsultingFlowPanel({ activeKey = "naming" }) {
       emitGuard(
         `이전 단계(${labelOf(blocking)})가 아직 완료되지 않았어요. 먼저 ${labelOf(blocking)}에서 후보를 선택해 주세요.`,
       );
+      return;
+    }
+
+    const access = ensureStrictStepAccess(step.key);
+    if (!access?.ok) {
+      // no_back 포함: 현재 단계로 되돌림
+      const msg =
+        access?.reason === "no_back"
+          ? "이전 단계로는 돌아갈 수 없습니다. 현재 진행 중인 단계에서 계속 진행해 주세요."
+          : "이전 단계를 먼저 완료해 주세요.";
+      emitGuard(msg);
+      if (access?.redirectTo) navigate(access.redirectTo);
       return;
     }
 

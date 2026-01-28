@@ -13,7 +13,7 @@ import { removeLegacyKeys } from "../utils/userLocalStorage.js";
 import { USER_DATA_KEYS } from "../utils/userDataKeys.js";
 
 import {
-  ensureStepAccess,
+  ensureStrictStepAccess,
   readPipeline,
 } from "../utils/brandPipelineStorage.js";
 
@@ -212,6 +212,8 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
   };
 
   const BRAND_GUARD_MESSAGE = {
+    no_back:
+      "이전 단계로는 돌아갈 수 없습니다. 현재 진행 중인 단계에서 계속 진행해 주세요.",
     diagnosis_missing:
       "브랜드 컨설팅을 시작하려면 기업진단을 먼저 완료해 주세요.",
     naming_missing:
@@ -223,7 +225,7 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
   };
 
   const guardBrandStep = (stepKey) => {
-    const access = ensureStepAccess(stepKey);
+    const access = ensureStrictStepAccess(stepKey);
     if (access?.ok) return true;
 
     const msg =

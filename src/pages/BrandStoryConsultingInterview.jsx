@@ -12,12 +12,30 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
 // ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
-import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+} from "../utils/userLocalStorage.js";
+
+import {
+  ensureStrictStepAccess,
+  setBrandFlowCurrent,
+  markBrandFlowPendingAbort,
+  consumeBrandFlowPendingAbort,
+  abortBrandFlow,
+  setStepResult,
+  clearStepsFrom,
+  readPipeline,
+} from "../utils/brandPipelineStorage.js";
+
+// ✅ 백 연동(이미 프로젝트에 존재하는 클라이언트 사용)
+import { apiRequest } from "../api/client.js";
 
 const STORAGE_KEY = "brandStoryConsultingInterviewDraft_v1";
 const RESULT_KEY = "brandStoryConsultingInterviewResult_v1";
 const LEGACY_KEY = "brandInterview_story_v1";
-const NEXT_PATH = "/logoconsulting";
+const NEXT_PATH = "/brand/logo/interview";
 
 const DIAG_KEYS = ["diagnosisInterviewDraft_v1", "diagnosisInterviewDraft"];
 
@@ -302,8 +320,176 @@ const INITIAL_FORM = {
   notes: "",
 };
 
+/** ======================
+ *  백 응답 후보 normalize (스토리)
+ *  - 백이 어떤 포맷을 주더라도 UI에서 쓰기 쉽게 3안 형태로 맞춤
+ *  - 현재 백(Mock): { story1, story2, story3 }
+ *  ====================== */
+function normalizeStoryCandidates(raw, form = {}) {
+  const payload = raw?.data ?? raw?.result ?? raw;
+
+  const pickStr = (v) => (typeof v === "string" ? v.trim() : "");
+  const tryKeys = (obj, keys) => {
+    for (const k of keys) {
+      const v = pickStr(obj?.[k]);
+      if (v) return v;
+    }
+    return "";
+  };
+
+  // ✅ 케이스 0) { story1, story2, story3 }
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const values = ["story1", "story2", "story3"]
+      .map((k) => pickStr(payload?.[k]))
+      .filter(Boolean);
+
+    if (values.length) {
+      const metaParts = [
+        safeText(form?.industry, ""),
+        stageLabel(form?.stage),
+        safeText(form?.targetCustomer, ""),
+      ].filter((v) => v && v !== "-");
+
+      const meta = metaParts.join(" · ");
+      const emotions = Array.isArray(form?.story_emotion)
+        ? form.story_emotion
+        : [];
+      const plot = safeText(form?.story_plot, "") || "-";
+
+      return values.slice(0, 3).map((story, idx) => {
+        const firstLine =
+          story
+            .split("\n")
+            .find((ln) => ln.trim())
+            ?.trim() || story;
+        return {
+          id: `story_${idx + 1}`,
+          name: `안 ${idx + 1}`,
+          oneLiner:
+            firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine,
+          meta,
+          story,
+          plot,
+          emotions,
+          ending: "-",
+          keywords: [],
+          raw: story,
+        };
+      });
+    }
+  }
+
+  // ✅ 케이스 1) 배열 / candidates 배열
+  const list = Array.isArray(payload)
+    ? payload
+    : payload?.candidates ||
+      payload?.stories ||
+      payload?.data?.candidates ||
+      payload?.result?.candidates;
+
+  if (!Array.isArray(list)) return [];
+
+  // ["스토리1","스토리2"] 형태
+  if (list.length && typeof list[0] === "string") {
+    return list.slice(0, 3).map((story, idx) => ({
+      id: `story_${idx + 1}`,
+      name: `안 ${idx + 1}`,
+      oneLiner: story.length > 60 ? `${story.slice(0, 60)}…` : story,
+      meta: "",
+      story,
+      plot: "-",
+      emotions: [],
+      ending: "-",
+      keywords: [],
+      raw: story,
+    }));
+  }
+
+  // 객체 배열(유연 대응)
+  return list.slice(0, 3).map((item, idx) => {
+    const id = item?.id || item?.candidateId || `story_${idx + 1}`;
+    const story =
+      pickStr(item?.story) ||
+      pickStr(item?.text) ||
+      pickStr(item?.content) ||
+      pickStr(item?.value) ||
+      tryKeys(item, ["story1", "story2", "story3"]) ||
+      "";
+
+    const firstLine =
+      story
+        .split("\n")
+        .find((ln) => ln.trim())
+        ?.trim() || story;
+
+    return {
+      id,
+      name: item?.name || item?.title || `안 ${idx + 1}`,
+      oneLiner:
+        item?.oneLiner ||
+        (firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine),
+      meta: item?.meta || "",
+      story,
+      plot: item?.plot || "-",
+      emotions: Array.isArray(item?.emotions) ? item.emotions : [],
+      ending: item?.ending || "-",
+      keywords: Array.isArray(item?.keywords) ? item.keywords : [],
+      raw: story,
+    };
+  });
+}
 export default function BrandStoryConsultingInterview({ onLogout }) {
   const navigate = useNavigate();
+
+  // ✅ Strict Flow 가드(스토리 단계) + 이탈/새로고침 처리
+  useEffect(() => {
+    try {
+      const hadPending = consumeBrandFlowPendingAbort();
+      if (hadPending) {
+        abortBrandFlow("interrupted");
+        window.alert(
+          "브랜드 컨설팅 진행이 중단되어, 네이밍부터 다시 시작합니다.",
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    const guard = ensureStrictStepAccess("story");
+    if (!guard.ok) {
+      const msg =
+        guard?.reason === "no_back"
+          ? "이전 단계로는 돌아갈 수 없습니다. 현재 진행 중인 단계에서 계속 진행해 주세요."
+          : "이전 단계를 먼저 완료해 주세요.";
+      window.alert(msg);
+      navigate(guard.redirectTo || "/brand/naming/interview", {
+        replace: true,
+      });
+      return;
+    }
+
+    try {
+      setBrandFlowCurrent("story");
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ 새로고침/탭닫기 경고 + 다음 진입 시 네이밍부터 리셋
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      try {
+        markBrandFlowPendingAbort("beforeunload");
+      } catch {
+        // ignore
+      }
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
 
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
@@ -516,15 +702,44 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
         }),
       );
     } catch {}
+
+    // ✅ pipeline 저장 + 이후 단계 초기화(스토리가 바뀌면 로고는 무효)
+    try {
+      const selected =
+        nextCandidates.find((c) => c.id === nextSelectedId) || null;
+      setStepResult("story", {
+        candidates: nextCandidates,
+        selectedId: nextSelectedId,
+        selected,
+        regenSeed: nextSeed,
+        updatedAt,
+      });
+      clearStepsFrom("logo");
+    } catch {
+      // ignore
+    }
   };
 
   const handleGenerateCandidates = async (mode = "generate") => {
-    // 🔌 BACKEND 연동 포인트 (브랜드 스토리 컨설팅 - AI 분석 요청 버튼)
-    // - 백엔드 연동 시(명세서 기준):
-    //   A) 인터뷰 저장(공통): POST /brands/interview
-    //   B) 스토리 생성:     POST /brands/story (또는 유사)
+    // 🔌 BACKEND 연동: 스토리 생성
+    // - POST /brands/{brandId}/story
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
+      return;
+    }
+
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    if (!brandId) {
+      alert(
+        "brandId를 확인할 수 없습니다. 기업진단/이전 단계를 다시 진행해 주세요.",
+      );
       return;
     }
 
@@ -533,13 +748,61 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
       const nextSeed = mode === "regen" ? regenSeed + 1 : regenSeed;
       if (mode === "regen") setRegenSeed(nextSeed);
 
-      await new Promise((r) => setTimeout(r, 450));
-      const nextCandidates = generateStoryCandidates(form, nextSeed);
+      const payload = {
+        ...form,
+        step: "story",
+        mode,
+        regenSeed: nextSeed,
+      };
+
+      const raw = await apiRequest(`/brands/${brandId}/story`, {
+        method: "POST",
+        data: payload,
+      });
+
+      const nextCandidates = normalizeStoryCandidates(raw, form);
+
+      if (!nextCandidates.length) {
+        alert("스토리 후보를 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
 
       setCandidates(nextCandidates);
       setSelectedId(null);
       persistResult(nextCandidates, null, nextSeed);
       scrollToResult();
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message ||
+        e?.userMessage ||
+        e?.message ||
+        "요청 실패";
+
+      console.warn("POST /brands/{brandId}/story failed:", e);
+
+      if (status === 401) {
+        alert("로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요.");
+        return;
+      }
+      if (status === 403) {
+        alert(
+          "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      // ✅ 백이 '스토리 단계가 아닙니다'를 내려주는 경우가 많아 안내 강화
+      if (String(msg).includes("스토리 단계")) {
+        alert(
+          `스토리 생성이 거절되었습니다: ${msg}
+
+컨셉 단계에서 '선택'을 완료한 뒤 다시 시도해 주세요.`,
+        );
+        return;
+      }
+
+      alert(`스토리 생성에 실패했습니다: ${msg}`);
     } finally {
       setAnalyzing(false);
     }
@@ -550,7 +813,64 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
     persistResult(candidates, id, regenSeed);
   };
 
-  const handleGoNext = () => {
+  const handleGoNext = async () => {
+    if (!canGoNext) return;
+
+    // ✅ 선택한 스토리를 백에 저장(스토리 -> 로고 단계로 이동)
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    const selected =
+      candidates.find((c) => c.id === selectedId) ||
+      candidates.find((c) => c.id === (selectedId || "")) ||
+      null;
+
+    const selectedStory = selected?.raw || selected?.story || "";
+
+    if (!brandId) {
+      alert(
+        "brandId를 확인할 수 없습니다. 기업진단/이전 단계를 다시 진행해 주세요.",
+      );
+      return;
+    }
+    if (!String(selectedStory).trim()) {
+      alert("선택된 스토리를 찾을 수 없습니다. 후보를 다시 선택해 주세요.");
+      return;
+    }
+
+    try {
+      await apiRequest(`/brands/${brandId}/story/select`, {
+        method: "POST",
+        data: { selectedByUser: String(selectedStory) },
+      });
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message || e?.userMessage || e?.message || "";
+
+      console.warn("POST /brands/{brandId}/story/select failed:", e);
+
+      if (status === 401 || status === 403) {
+        alert(
+          status === 401
+            ? "로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요."
+            : "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      // 이미 단계가 넘어간 경우(예: 재진입)에는 다음으로 진행 허용
+      if (!String(msg).includes("스토리 단계")) {
+        alert(`스토리 선택 저장에 실패했습니다: ${msg || "요청 실패"}`);
+        return;
+      }
+    }
+
     navigate(NEXT_PATH);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -564,6 +884,14 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
       userRemoveItem(RESULT_KEY);
       userRemoveItem(LEGACY_KEY);
     } catch {}
+
+    // ✅ pipeline에서도 현재 단계(스토리)부터 초기화
+    try {
+      clearStepsFrom("story");
+      setBrandFlowCurrent("story");
+    } catch {
+      // ignore
+    }
 
     const diag = (() => {
       try {
@@ -883,10 +1211,7 @@ export default function BrandStoryConsultingInterview({ onLogout }) {
                 <div className="card" style={{ marginTop: 14 }}>
                   <div className="card__head">
                     <h2>스토리 후보 3안</h2>
-                    <p>
-                      후보 1개를 선택하면 다음 단계로 진행할 수 있어요. (현재는
-                      더미 생성)
-                    </p>
+                    <p>후보 1개를 선택하면 다음 단계로 진행할 수 있어요.</p>
                   </div>
 
                   <div

@@ -9,7 +9,11 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
 // ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
-import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+} from "../utils/userLocalStorage.js";
 
 // ✅ 필드 라벨(공용)
 const FIELD_LABELS = {
@@ -73,7 +77,6 @@ const FIELD_LABELS = {
   // ✅ 컨셉 컨설팅(Concept)
   brandName: "브랜드/서비스명",
   category: "업종/카테고리",
-  stage: "현재 단계",
   core_values: "핵심 가치",
   target: "타겟 고객",
   differentiation: "차별점",
@@ -91,6 +94,10 @@ const FIELD_LABELS = {
   selected_doDont: "Do / Don't",
   selected_colorMood: "컬러/무드",
   selected_heroImagery: "추천 이미지",
+
+  // ✅ 결과 체크(백 응답 기반)
+  candidates: "후보 생성",
+  selected: "후보 선택",
 };
 
 function stageLabel(stage) {
@@ -106,7 +113,7 @@ function stageLabel(stage) {
 const SERVICE_CONFIG = {
   naming: {
     title: "네이밍 컨설팅 결과 리포트",
-    sub: "입력 내용을 기반으로 요약 리포트를 생성했습니다. (현재는 UI/연결용 더미 리포트)",
+    sub: "백엔드 응답(후보/선택안)을 기반으로 결과를 표시합니다.",
     storageKey: "brandInterview_naming_v1",
     resetKeys: [
       "namingConsultingInterviewDraft_v1",
@@ -150,7 +157,7 @@ const SERVICE_CONFIG = {
 
   logo: {
     title: "로고 컨설팅 결과 리포트",
-    sub: "입력 내용을 기반으로 요약 리포트를 생성했습니다. (현재는 UI/연결용 더미 리포트)",
+    sub: "저장된 입력/결과를 바탕으로 리포트를 표시합니다.",
     storageKey: "brandInterview_logo_v1",
     resetKeys: ["logoConsultingInterviewDraft_v1", "brandInterview_logo_v1"],
     interviewPath: "/brand/logo/interview", // ✅ App.jsx와 일치
@@ -201,7 +208,7 @@ const SERVICE_CONFIG = {
 
   homepage: {
     title: "컨셉 컨설팅 결과 리포트",
-    sub: "저장된 결과(선택안/후보안)를 기반으로 리포트를 표시합니다.",
+    sub: "백엔드 응답(후보/선택안)을 기반으로 결과를 표시합니다.",
     storageKey: "brandInterview_concept_v1",
     storageKeyFallback: "brandInterview_homepage_v1",
     resetKeys: [
@@ -288,7 +295,7 @@ const SERVICE_CONFIG = {
   // ✅ NEW: story 추가
   story: {
     title: "브랜드 스토리 컨설팅 결과 리포트",
-    sub: "입력 내용을 기반으로 요약 리포트를 생성했습니다. (현재는 UI/연결용 더미 리포트)",
+    sub: "저장된 입력/결과를 바탕으로 리포트를 표시합니다.",
     storageKey: "brandInterview_story_v1",
     resetKeys: [
       "brandStoryConsultingInterviewDraft_v1",
@@ -326,9 +333,352 @@ const SERVICE_CONFIG = {
   },
 };
 
+// --------------------
+// ✅ 공용 렌더 유틸 (JSON을 “칸/섹션”으로 자동 분리)
+// --------------------
+function isPlainObject(v) {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
 function renderValue(value) {
   const v = String(value ?? "").trim();
   return v ? v : "-";
+}
+
+function humanizeKey(key) {
+  const k = String(key || "");
+  const snake = k.replace(/_/g, " ");
+  const spaced = snake.replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  const cleaned = spaced.replace(/\s+/g, " ").trim();
+  if (!cleaned) return "-";
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+function labelOf(key) {
+  return FIELD_LABELS[key] || humanizeKey(key);
+}
+
+function safeStringify(v) {
+  try {
+    return JSON.stringify(v, null, 2);
+  } catch {
+    return String(v);
+  }
+}
+
+function toTextArray(v) {
+  if (!v) return [];
+  if (Array.isArray(v))
+    return v.map((x) => String(x ?? "").trim()).filter(Boolean);
+  if (typeof v === "string") {
+    if (v.includes(","))
+      return v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    return [v.trim()].filter(Boolean);
+  }
+  return [];
+}
+
+function pickFirstText(...vals) {
+  for (const v of vals) {
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v)) {
+      const first = v.find((x) => String(x ?? "").trim());
+      if (first !== undefined) return String(first).trim();
+      continue;
+    }
+    const s = String(v).trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function guessItemTitle(obj, idx) {
+  if (!isPlainObject(obj)) return `항목 ${idx + 1}`;
+  return (
+    pickFirstText(
+      obj.title,
+      obj.name,
+      obj.label,
+      obj.conceptTitle,
+      obj.oneLiner,
+      obj.oneLine,
+      obj.tagline,
+      obj.id,
+      obj.code,
+    ) || `항목 ${idx + 1}`
+  );
+}
+
+function KVGrid({ data, columns = 2, stageKeyFallback }) {
+  const entries = Object.entries(data || {}).filter(([k, v]) => {
+    if (v === null || v === undefined) return false;
+    const s = String(v ?? "").trim();
+    if (Array.isArray(v)) return v.length > 0;
+    if (isPlainObject(v)) return Object.keys(v).length > 0;
+    return Boolean(s);
+  });
+
+  if (!entries.length) {
+    return (
+      <div className="block">
+        <div className="block__body">표시할 값이 없습니다.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="summaryGrid"
+      style={{
+        gridTemplateColumns:
+          columns === 3 ? "repeat(3, 1fr)" : "repeat(2, 1fr)",
+      }}
+    >
+      {entries.map(([k, v]) => (
+        <div className="summaryItem" key={k}>
+          <div className="k">{labelOf(k)}</div>
+          <div className="v" style={{ whiteSpace: "pre-wrap" }}>
+            {k === "stage" || k === stageKeyFallback
+              ? stageLabel(v)
+              : Array.isArray(v)
+                ? v.join(", ")
+                : isPlainObject(v)
+                  ? safeStringify(v)
+                  : renderValue(v)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SectionCard({ title, subtitle, children, footer }) {
+  return (
+    <div className="card">
+      <div className="card__head">
+        <h2>{title}</h2>
+        {subtitle ? <p>{subtitle}</p> : null}
+      </div>
+      {children}
+      {footer ? <div style={{ marginTop: 12 }}>{footer}</div> : null}
+    </div>
+  );
+}
+
+function Chips({ items }) {
+  const arr = toTextArray(items);
+  if (!arr.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+      {arr.map((t, i) => (
+        <span
+          key={`${t}-${i}`}
+          style={{
+            fontSize: 12,
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid #e5e7eb",
+            background: "#fff",
+          }}
+        >
+          {t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function AnyValueBox({ label, value, depth = 0 }) {
+  const MAX_DEPTH = 3;
+
+  if (value === null || value === undefined) {
+    return (
+      <div className="block">
+        <div className="block__title">{label}</div>
+        <div className="block__body">-</div>
+      </div>
+    );
+  }
+
+  if (!Array.isArray(value) && !isPlainObject(value)) {
+    return (
+      <div className="block">
+        <div className="block__title">{label}</div>
+        <div className="block__body" style={{ whiteSpace: "pre-wrap" }}>
+          {renderValue(value)}
+        </div>
+      </div>
+    );
+  }
+
+  if (Array.isArray(value)) {
+    const isPrimitiveArray = value.every(
+      (x) =>
+        x === null ||
+        x === undefined ||
+        (!Array.isArray(x) && !isPlainObject(x)),
+    );
+
+    return (
+      <div className="block">
+        <div className="block__title">{label}</div>
+        <div className="block__body">
+          {value.length === 0 ? (
+            "-"
+          ) : isPrimitiveArray ? (
+            <Chips
+              items={value.map((x) => String(x ?? "").trim()).filter(Boolean)}
+            />
+          ) : (
+            <div style={{ display: "grid", gap: 10 }}>
+              {value.map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 12,
+                    padding: 12,
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ fontWeight: 800, marginBottom: 8 }}>
+                    {guessItemTitle(item, idx)}
+                  </div>
+                  {isPlainObject(item) ? (
+                    depth >= MAX_DEPTH ? (
+                      <pre
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {safeStringify(item)}
+                      </pre>
+                    ) : (
+                      <KVGrid data={item} columns={2} />
+                    )
+                  ) : (
+                    <div style={{ whiteSpace: "pre-wrap" }}>
+                      {renderValue(item)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="block">
+      <div className="block__title">{label}</div>
+      <div className="block__body">
+        {depth >= MAX_DEPTH ? (
+          <details>
+            <summary style={{ cursor: "pointer", fontWeight: 800 }}>
+              JSON 펼치기
+            </summary>
+            <pre
+              style={{
+                marginTop: 10,
+                fontSize: 12,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
+            >
+              {safeStringify(value)}
+            </pre>
+          </details>
+        ) : (
+          <KVGrid data={value} columns={2} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function buildAutoSections(
+  payload,
+  { excludeKeys = [], stageKeyFallback } = {},
+) {
+  if (!isPlainObject(payload)) return [];
+
+  const keys = Object.keys(payload).filter((k) => !excludeKeys.includes(k));
+  if (!keys.length) return [];
+
+  const simple = {};
+  const complex = [];
+
+  keys.forEach((k) => {
+    const v = payload[k];
+    const isComplex = Array.isArray(v) || isPlainObject(v);
+    if (!isComplex) {
+      simple[k] = v;
+      return;
+    }
+    if (isPlainObject(v) && Object.keys(v).length <= 2) {
+      simple[k] = v;
+      return;
+    }
+    complex.push([k, v]);
+  });
+
+  const sections = [];
+
+  if (Object.keys(simple).length) {
+    sections.push({
+      type: "kv",
+      title: "추가 요약",
+      subtitle: "백엔드 응답의 나머지 필드를 보기 좋게 정리했습니다.",
+      data: simple,
+      stageKeyFallback,
+    });
+  }
+
+  complex.forEach(([k, v]) => {
+    sections.push({
+      type: "any",
+      title: labelOf(k),
+      subtitle: "",
+      keyName: k,
+      value: v,
+      stageKeyFallback,
+    });
+  });
+
+  return sections;
+}
+
+function getNamingDisplayTitle(c) {
+  return pickFirstText(
+    c?.oneLiner,
+    c?.one_line,
+    c?.oneLiner,
+    c?.primary,
+    c?.result,
+    c?.finalName,
+    c?.nameFinal,
+    c?.samples,
+    c?.title,
+    c?.name,
+  );
+}
+
+function getConceptDisplayTitle(c) {
+  return pickFirstText(
+    c?.title,
+    c?.conceptTitle,
+    c?.concept_title,
+    c?.name,
+    c?.label,
+  );
 }
 
 export default function BrandConsultingResult({ onLogout }) {
@@ -345,15 +695,6 @@ export default function BrandConsultingResult({ onLogout }) {
   }, [location.search]);
 
   const config = SERVICE_CONFIG[service];
-  // 🔌 BACKEND 연동 포인트 (브랜드 결과 화면)
-  // - 현재: localStorage(config.storageKey)에서 form/updatedAt을 읽어 화면에 표시
-  // - 백엔드 연동 시(명세서 기준) 결과 데이터 출처 후보:
-  //   1) 서비스별 산출물 조회: GET /brands/story, GET /brands/naming, GET /brands/logo
-  //   2) 종합 리포트:        GET /brands/finalreport  (명세서에 존재)
-  //   3) 인터뷰 리포트:      GET /brands/{brandId}/report
-  // - 구현 방법(권장):
-  //   - 로그인 토큰으로 brandId(또는 선택한 brandId)를 확보한 뒤,
-  //   - useEffect에서 fetch/axios로 위 엔드포인트 호출 → 응답을 state에 저장 → 렌더
 
   const draft = useMemo(() => {
     try {
@@ -366,22 +707,46 @@ export default function BrandConsultingResult({ onLogout }) {
     } catch {
       return null;
     }
-  }, [config.storageKey]);
+  }, [config.storageKey, config.storageKeyFallback]);
+
+  const isBackendOnlyResult = service === "naming" || service === "homepage";
+
+  const candidates = useMemo(() => {
+    return Array.isArray(draft?.candidates) ? draft.candidates : [];
+  }, [draft]);
+
+  const selectedId = draft?.selectedId ?? null;
+
+  const selected = useMemo(() => {
+    if (draft?.selected) return draft.selected;
+    if (selectedId) return candidates.find((c) => c?.id === selectedId) || null;
+    return null;
+  }, [draft, candidates, selectedId]);
 
   const baseForm = draft?.form || {};
   const form = useMemo(() => {
+    if (isBackendOnlyResult) return {};
     const extra = config.enrichForm ? config.enrichForm(draft) : null;
     return extra ? { ...baseForm, ...extra } : baseForm;
-  }, [draft]);
-  const requiredKeys = config.requiredKeys;
+  }, [draft, isBackendOnlyResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const requiredKeys = isBackendOnlyResult
+    ? ["candidates", "selected"]
+    : config.requiredKeys;
 
   const requiredStatus = useMemo(() => {
     const status = {};
+    if (isBackendOnlyResult) {
+      status.candidates = candidates.length > 0;
+      status.selected = Boolean(selected);
+      return status;
+    }
+
     requiredKeys.forEach((k) => {
       status[k] = Boolean(String(form?.[k] || "").trim());
     });
     return status;
-  }, [form, requiredKeys]);
+  }, [form, requiredKeys, isBackendOnlyResult, candidates.length, selected]);
 
   const completedRequired = useMemo(
     () => requiredKeys.filter((k) => requiredStatus[k]).length,
@@ -398,6 +763,21 @@ export default function BrandConsultingResult({ onLogout }) {
     if (!t) return "-";
     const d = new Date(t);
     return Number.isNaN(d.getTime()) ? "-" : d.toLocaleString();
+  }, [draft]);
+
+  const extraSections = useMemo(() => {
+    if (!draft) return [];
+    const exclude = [
+      "updatedAt",
+      "form",
+      "candidates",
+      "selected",
+      "selectedId",
+    ];
+    return buildAutoSections(draft, {
+      excludeKeys: exclude,
+      stageKeyFallback: "stage",
+    });
   }, [draft]);
 
   const handleResetAll = () => {
@@ -479,6 +859,348 @@ export default function BrandConsultingResult({ onLogout }) {
                     </button>
                   </div>
                 </div>
+              ) : isBackendOnlyResult ? (
+                <>
+                  <SectionCard
+                    title={
+                      service === "naming" ? "선택한 네이밍" : "선택한 컨셉"
+                    }
+                    subtitle="선택안은 상단에서 한 눈에 보이게 요약하고, 세부는 아래 섹션에 나눠 표시합니다."
+                    footer={
+                      <div style={{ fontSize: 12, color: "#6b7280" }}>
+                        마지막 저장: {lastSaved}
+                      </div>
+                    }
+                  >
+                    {selected ? (
+                      <div className="block">
+                        <div className="block__title">선택안 요약</div>
+                        <div
+                          className="block__body"
+                          style={{ whiteSpace: "pre-wrap" }}
+                        >
+                          {service === "naming"
+                            ? (() => {
+                                const title = getNamingDisplayTitle(selected);
+                                const label = pickFirstText(
+                                  selected?.title,
+                                  selected?.label,
+                                  selected?.name,
+                                );
+                                const rationale = pickFirstText(
+                                  selected?.rationale,
+                                  selected?.reason,
+                                  selected?.note,
+                                  selected?.memo,
+                                );
+                                const keywords = toTextArray(
+                                  selected?.keywords || selected?.tags,
+                                );
+                                const checks = toTextArray(
+                                  selected?.checks || selected?.checkpoints,
+                                );
+                                const avoid = toTextArray(
+                                  selected?.avoid ||
+                                    selected?.avoidWords ||
+                                    selected?.avoid_terms,
+                                );
+                                const samples = toTextArray(selected?.samples);
+
+                                return (
+                                  <div>
+                                    <div
+                                      style={{ fontSize: 18, fontWeight: 900 }}
+                                    >
+                                      {renderValue(title)}
+                                    </div>
+
+                                    {label && label !== title ? (
+                                      <div
+                                        style={{
+                                          marginTop: 6,
+                                          fontSize: 12,
+                                          color: "#6b7280",
+                                        }}
+                                      >
+                                        {label}
+                                      </div>
+                                    ) : null}
+
+                                    {rationale ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>근거</b> · {rationale}
+                                      </div>
+                                    ) : null}
+
+                                    {keywords.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>키워드</b>
+                                        <Chips items={keywords} />
+                                      </div>
+                                    ) : null}
+
+                                    {checks.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>체크 포인트</b>
+                                        <Chips items={checks} />
+                                      </div>
+                                    ) : null}
+
+                                    {avoid.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>주의</b>
+                                        <Chips items={avoid} />
+                                      </div>
+                                    ) : null}
+
+                                    {samples.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>샘플</b>
+                                        <Chips items={samples} />
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()
+                            : (() => {
+                                const title = getConceptDisplayTitle(selected);
+                                const oneLine = pickFirstText(
+                                  selected?.oneLine,
+                                  selected?.one_line,
+                                  selected?.oneLiner,
+                                );
+                                const slogan = pickFirstText(
+                                  selected?.slogan,
+                                  selected?.tagline,
+                                );
+                                const summary = pickFirstText(
+                                  selected?.summary,
+                                  selected?.description,
+                                  selected?.overview,
+                                );
+                                const keyMessage = pickFirstText(
+                                  selected?.keyMessage,
+                                  selected?.key_message,
+                                );
+                                const trustFactors = pickFirstText(
+                                  selected?.trustFactors,
+                                  selected?.trust_factors,
+                                );
+                                const vibe = pickFirstText(
+                                  selected?.conceptVibe,
+                                  selected?.concept_vibe,
+                                  selected?.vibe,
+                                );
+                                const tone = pickFirstText(
+                                  selected?.tone,
+                                  selected?.voice,
+                                  selected?.style,
+                                );
+                                const keywords = toTextArray(
+                                  selected?.keywords || selected?.tags,
+                                );
+                                const coreValues = toTextArray(
+                                  selected?.coreValues || selected?.core_values,
+                                );
+                                const archetype = toTextArray(
+                                  selected?.brandArchetype ||
+                                    selected?.brand_archetype,
+                                );
+
+                                return (
+                                  <div>
+                                    <div
+                                      style={{ fontSize: 18, fontWeight: 900 }}
+                                    >
+                                      {renderValue(title)}
+                                    </div>
+
+                                    {oneLine ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>한 줄</b> · {oneLine}
+                                      </div>
+                                    ) : null}
+
+                                    {slogan ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>태그라인</b> · {slogan}
+                                      </div>
+                                    ) : null}
+
+                                    {summary ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>요약</b> · {summary}
+                                      </div>
+                                    ) : null}
+
+                                    {keyMessage ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>키 메시지</b> · {keyMessage}
+                                      </div>
+                                    ) : null}
+
+                                    {trustFactors ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>신뢰 포인트</b> · {trustFactors}
+                                      </div>
+                                    ) : null}
+
+                                    {vibe ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>분위기</b> · {vibe}
+                                      </div>
+                                    ) : null}
+
+                                    {tone ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>톤/보이스</b> · {tone}
+                                      </div>
+                                    ) : null}
+
+                                    {coreValues.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>핵심가치</b>
+                                        <Chips items={coreValues} />
+                                      </div>
+                                    ) : null}
+
+                                    {archetype.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>아키타입</b>
+                                        <Chips items={archetype} />
+                                      </div>
+                                    ) : null}
+
+                                    {keywords.length ? (
+                                      <div style={{ marginTop: 10 }}>
+                                        <b>키워드</b>
+                                        <Chips items={keywords} />
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="block">
+                        <div className="block__title">선택안</div>
+                        <div className="block__body">
+                          선택된 후보가 없습니다. 인터뷰 페이지에서 후보를
+                          선택해주세요.
+                        </div>
+                      </div>
+                    )}
+                  </SectionCard>
+
+                  <SectionCard
+                    title="후보안"
+                    subtitle="후보 리스트는 개별 카드로 분리해서 보기 좋게 표시합니다."
+                  >
+                    {candidates.length ? (
+                      <div style={{ display: "grid", gap: 12 }}>
+                        {candidates.map((c, idx) => {
+                          const key = c?.id || `${idx}`;
+                          const title =
+                            service === "naming"
+                              ? getNamingDisplayTitle(c)
+                              : getConceptDisplayTitle(c);
+
+                          const one =
+                            service === "naming"
+                              ? pickFirstText(
+                                  c?.rationale,
+                                  c?.reason,
+                                  c?.note,
+                                  c?.memo,
+                                )
+                              : pickFirstText(
+                                  c?.oneLine,
+                                  c?.one_line,
+                                  c?.oneLiner,
+                                  c?.summary,
+                                  c?.description,
+                                );
+
+                          const kw = toTextArray(c?.keywords || c?.tags);
+
+                          return (
+                            <div
+                              key={key}
+                              style={{
+                                border: "1px solid #e5e7eb",
+                                borderRadius: 16,
+                                padding: 14,
+                                background: "#fff",
+                              }}
+                            >
+                              <div style={{ fontWeight: 900, fontSize: 16 }}>
+                                {renderValue(title) || `후보 ${idx + 1}`}
+                              </div>
+
+                              {one ? (
+                                <div style={{ marginTop: 8, color: "#374151" }}>
+                                  <b>
+                                    {service === "naming"
+                                      ? "근거"
+                                      : "한 줄/요약"}
+                                  </b>{" "}
+                                  · {one}
+                                </div>
+                              ) : null}
+
+                              {kw.length ? (
+                                <div style={{ marginTop: 10 }}>
+                                  <b style={{ color: "#374151" }}>키워드</b>
+                                  <Chips items={kw} />
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="block">
+                        <div className="block__body">
+                          후보 데이터가 없습니다.
+                        </div>
+                      </div>
+                    )}
+                  </SectionCard>
+
+                  {extraSections.length
+                    ? extraSections.map((sec, i) => {
+                        if (sec.type === "kv") {
+                          return (
+                            <SectionCard
+                              key={`extra-kv-${i}`}
+                              title={sec.title}
+                              subtitle={sec.subtitle}
+                            >
+                              <KVGrid
+                                data={sec.data}
+                                columns={2}
+                                stageKeyFallback={sec.stageKeyFallback}
+                              />
+                            </SectionCard>
+                          );
+                        }
+                        return (
+                          <SectionCard
+                            key={`extra-any-${i}`}
+                            title={sec.title}
+                            subtitle={sec.subtitle}
+                          >
+                            <AnyValueBox
+                              label={sec.title}
+                              value={sec.value}
+                              depth={0}
+                            />
+                          </SectionCard>
+                        );
+                      })
+                    : null}
+                </>
               ) : (
                 config.blocks.map((b, idx) => {
                   if (b.title === "요약") {
@@ -596,8 +1318,8 @@ export default function BrandConsultingResult({ onLogout }) {
                 </button>
 
                 <p className="hint">
-                  * service 값에 따라 다른 localStorage 키를 읽어 다른 결과를
-                  보여줍니다.
+                  * naming / concept(homepage)은 <b>백 응답 JSON</b>을
+                  “섹션/칸”으로 자동 분리해 표시합니다.
                 </p>
               </div>
             </aside>

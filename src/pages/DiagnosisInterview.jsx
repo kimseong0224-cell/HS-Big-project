@@ -14,6 +14,12 @@ import { apiRequest } from "../api/client.js";
 // ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
 import { userGetItem, userSetItem } from "../utils/userLocalStorage.js";
 
+import {
+  abortBrandFlow,
+  buildDiagnosisSummaryFromDraft,
+  upsertPipeline,
+} from "../utils/brandPipelineStorage.js";
+
 const STORAGE_KEY = "diagnosisInterviewDraft_v1";
 const HOME_SUMMARY_KEY = "diagnosisDraft";
 
@@ -322,10 +328,19 @@ export default function DiagnosisInterview({ onLogout }) {
       };
 
       try {
-        userSetItem(
-          DIAGNOSIS_RESULT_KEY,
-          JSON.stringify(resultPayload),
-        );
+        userSetItem(DIAGNOSIS_RESULT_KEY, JSON.stringify(resultPayload));
+      } catch {
+        // ignore
+      }
+
+      // ✅ pipeline에 brandId/진단요약 저장 + 기존 브랜드 컨설팅 진행 초기화(brandId 섞임 방지)
+      try {
+        const summary = buildDiagnosisSummaryFromDraft(form);
+        abortBrandFlow("new_diagnosis");
+        upsertPipeline({
+          brandId: resultPayload.brandId,
+          diagnosisSummary: summary,
+        });
       } catch {
         // ignore
       }
