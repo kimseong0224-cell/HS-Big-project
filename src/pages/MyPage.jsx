@@ -8,6 +8,9 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 function safeParse(raw) {
   try {
     return raw ? JSON.parse(raw) : null;
@@ -18,7 +21,7 @@ function safeParse(raw) {
 
 function hasAnyStorage(keys) {
   return keys.some((k) => {
-    const raw = localStorage.getItem(k);
+    const raw = userGetItem(k);
     if (!raw) return false;
     const parsed = safeParse(raw);
     return Boolean(parsed && parsed.form);
@@ -26,7 +29,7 @@ function hasAnyStorage(keys) {
 }
 
 function hasCompletedResult(key) {
-  const parsed = safeParse(localStorage.getItem(key));
+  const parsed = safeParse(userGetItem(key));
   if (!parsed) return false;
   return Boolean(parsed.selected || parsed.selectedId);
 }

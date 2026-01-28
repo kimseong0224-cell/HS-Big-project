@@ -8,6 +8,13 @@ import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 import { apiRequest } from "../api/client.js";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+} from "../utils/userLocalStorage.js";
+
 const LOCATION_OPTIONS = [
   "수도권",
   "강원도",
@@ -54,6 +61,8 @@ export default function InvestmentPostCreate({ onLogout }) {
   const [sizeOpen, setSizeOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  // ✅ 드롭다운 닫기 UX는 "옵션 선택 시 즉시 닫기"만 사용
 
   const updateField = (key) => (event) => {
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
@@ -113,14 +122,13 @@ export default function InvestmentPostCreate({ onLogout }) {
     }
   };
 
-  const toggleLocation = (value) => {
-    setForm((prev) => {
-      const exists = prev.locations.includes(value);
-      const nextLocations = exists
-        ? prev.locations.filter((loc) => loc !== value)
-        : [...prev.locations, value];
-      return { ...prev, locations: nextLocations };
-    });
+  // ✅ 단일 선택: 지역 1개만 저장 + 옵션 선택 시 즉시 닫기
+  const selectLocation = (value) => {
+    setForm((prev) => ({
+      ...prev,
+      locations: value ? [value] : [],
+    }));
+    setLocationOpen(false);
   };
 
   const removeLocation = (value) => {
@@ -130,14 +138,13 @@ export default function InvestmentPostCreate({ onLogout }) {
     }));
   };
 
-  const toggleCompanySize = (value) => {
-    setForm((prev) => {
-      const exists = prev.companySizes.includes(value);
-      const nextSizes = exists
-        ? prev.companySizes.filter((size) => size !== value)
-        : [...prev.companySizes, value];
-      return { ...prev, companySizes: nextSizes };
-    });
+  // ✅ 단일 선택: 회사 규모 1개만 저장 + 옵션 선택 시 즉시 닫기
+  const selectCompanySize = (value) => {
+    setForm((prev) => ({
+      ...prev,
+      companySizes: value ? [value] : [],
+    }));
+    setSizeOpen(false);
   };
 
   const removeCompanySize = (value) => {
@@ -199,7 +206,7 @@ export default function InvestmentPostCreate({ onLogout }) {
           "Content-Type": "multipart/form-data",
         },
       });
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      userRemoveItem(DRAFT_STORAGE_KEY);
       navigate("/investment");
     } catch (error) {
       console.error(error);
@@ -211,7 +218,7 @@ export default function InvestmentPostCreate({ onLogout }) {
 
   const handleDraftSave = () => {
     try {
-      localStorage.setItem(
+      userSetItem(
         DRAFT_STORAGE_KEY,
         JSON.stringify({ ...form, logoImageUrl: logoPreview }),
       );
@@ -254,7 +261,7 @@ export default function InvestmentPostCreate({ onLogout }) {
 
   const handleDraftDiscard = () => {
     try {
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      userRemoveItem(DRAFT_STORAGE_KEY);
     } catch (error) {
       console.error(error);
     }
@@ -264,7 +271,7 @@ export default function InvestmentPostCreate({ onLogout }) {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+      const saved = userGetItem(DRAFT_STORAGE_KEY);
       if (!saved) return;
       const parsed = JSON.parse(saved);
       setDraftCandidate(parsed);
@@ -425,7 +432,16 @@ export default function InvestmentPostCreate({ onLogout }) {
                             className={`invest-location-option ${
                               selected ? "is-selected" : ""
                             }`}
-                            onClick={() => toggleLocation(loc)}
+                            // ✅ 옵션 클릭 시 즉시 닫기 (키보드 Enter도 onClick으로 지원)
+                            onMouseDown={(event) => {
+                              // 클릭 시 포커스 이동/이상 동작 방지
+                              event.preventDefault();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              selectLocation(loc);
+                            }}
                           >
                             {loc}
                           </button>
@@ -494,7 +510,15 @@ export default function InvestmentPostCreate({ onLogout }) {
                             className={`invest-location-option ${
                               selected ? "is-selected" : ""
                             }`}
-                            onClick={() => toggleCompanySize(size)}
+                            // ✅ 옵션 클릭 시 즉시 닫기 (키보드 Enter도 onClick으로 지원)
+                            onMouseDown={(event) => {
+                              event.preventDefault();
+                            }}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              selectCompanySize(size);
+                            }}
                           >
                             {size}
                           </button>

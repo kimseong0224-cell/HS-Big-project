@@ -1,4 +1,6 @@
 // src/utils/brandPipelineStorage.js
+import { userGetItem, userSetItem, userRemoveItem, userSafeParse } from "./userLocalStorage.js";
+
 export const PIPELINE_KEY = "brandPipeline_v1";
 const DIAG_KEYS = ["diagnosisInterviewDraft_v1", "diagnosisInterviewDraft"];
 
@@ -34,7 +36,7 @@ const STEP_STORAGE_KEYS = {
 
 function removeLocalStorageKeys(keys = []) {
   try {
-    for (const k of keys) localStorage.removeItem(k);
+    for (const k of keys) userRemoveItem(k);
   } catch {
     // ignore
   }
@@ -49,12 +51,12 @@ function safeParse(raw) {
 }
 
 export function readPipeline() {
-  return safeParse(localStorage.getItem(PIPELINE_KEY)) || {};
+  return safeParse(userGetItem(PIPELINE_KEY)) || {};
 }
 
 export function writePipeline(next) {
   const payload = { ...(next || {}), updatedAt: Date.now() };
-  localStorage.setItem(PIPELINE_KEY, JSON.stringify(payload));
+  userSetItem(PIPELINE_KEY, JSON.stringify(payload));
   return payload;
 }
 
@@ -97,7 +99,7 @@ export function setStepResult(stepKey, data) {
     },
     updatedAt: Date.now(),
   };
-  localStorage.setItem(PIPELINE_KEY, JSON.stringify(next));
+  userSetItem(PIPELINE_KEY, JSON.stringify(next));
   return next;
 }
 
@@ -114,7 +116,7 @@ export function getSelected(stepKey) {
 
 export function readDiagnosisDraftForm() {
   for (const k of DIAG_KEYS) {
-    const parsed = safeParse(localStorage.getItem(k));
+    const parsed = userSafeParse(k);
     if (!parsed) continue;
     const form =
       parsed?.form && typeof parsed.form === "object" ? parsed.form : parsed;
@@ -315,7 +317,7 @@ export function migrateLegacyToPipelineIfNeeded() {
     const prev = prevOf[step];
     if (prev && !isDone(prev)) continue;
 
-    const raw = safeParse(localStorage.getItem(key));
+    const raw = userSafeParse(key);
     if (!raw) continue;
 
     const rawUpdatedAt = Number(raw?.updatedAt || 0);

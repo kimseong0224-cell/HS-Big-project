@@ -11,6 +11,9 @@ import ConsultingFlowMini from "../components/ConsultingFlowMini.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 const STORAGE_KEY = "logoConsultingInterviewDraft_v1";
 const RESULT_KEY = "logoConsultingInterviewResult_v1";
 const LEGACY_KEY = "brandInterview_logo_v1";
@@ -47,7 +50,7 @@ function safeParse(raw) {
 
 function readDiagnosisForm() {
   for (const k of DIAG_KEYS) {
-    const parsed = safeParse(localStorage.getItem(k));
+    const parsed = safeParse(userGetItem(k));
     if (!parsed) continue;
     const form =
       parsed?.form && typeof parsed.form === "object" ? parsed.form : parsed;
@@ -355,7 +358,7 @@ export default function LogoConsultingInterview({ onLogout }) {
   // ✅ draft 로드 (+ 구버전 최소 마이그레이션)
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = userGetItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
 
@@ -455,7 +458,7 @@ export default function LogoConsultingInterview({ onLogout }) {
   // ✅ 결과 로드(후보/선택)
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(RESULT_KEY);
+      const raw = userGetItem(RESULT_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.candidates)) setCandidates(parsed.candidates);
@@ -472,7 +475,7 @@ export default function LogoConsultingInterview({ onLogout }) {
     const t = setTimeout(() => {
       try {
         const payload = { form, updatedAt: Date.now() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        userSetItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
       } catch {
@@ -487,7 +490,7 @@ export default function LogoConsultingInterview({ onLogout }) {
     const updatedAt = Date.now();
 
     try {
-      localStorage.setItem(
+      userSetItem(
         RESULT_KEY,
         JSON.stringify({
           candidates: nextCandidates,
@@ -503,7 +506,7 @@ export default function LogoConsultingInterview({ onLogout }) {
     try {
       const selected =
         nextCandidates.find((c) => c.id === nextSelectedId) || null;
-      localStorage.setItem(
+      userSetItem(
         LEGACY_KEY,
         JSON.stringify({
           form,
@@ -561,9 +564,9 @@ export default function LogoConsultingInterview({ onLogout }) {
     if (!ok) return;
 
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(RESULT_KEY);
-      localStorage.removeItem(LEGACY_KEY);
+      userRemoveItem(STORAGE_KEY);
+      userRemoveItem(RESULT_KEY);
+      userRemoveItem(LEGACY_KEY);
     } catch {
       // ignore
     }

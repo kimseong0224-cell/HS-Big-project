@@ -11,6 +11,9 @@ import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 // ✅ 배너 이미지: 기업진단 & 인터뷰 홈 배너 → Banner_D 사용
 import bannerImage from "../Image/banner_image/Banner_D.png";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 const INTERVIEW_STORAGE_KEY = "diagnosisInterviewDraft_v1";
 const HOME_SUMMARY_KEY = "diagnosisDraft";
 
@@ -65,7 +68,7 @@ export default function DiagnosisHome({ onLogout }) {
   const loadDraft = () => {
     // 1) 홈 요약 키 우선
     try {
-      const raw = localStorage.getItem(HOME_SUMMARY_KEY);
+      const raw = userGetItem(HOME_SUMMARY_KEY);
       if (raw) return JSON.parse(raw);
     } catch {
       // ignore
@@ -73,7 +76,7 @@ export default function DiagnosisHome({ onLogout }) {
 
     // 2) 요약 없으면 원본 draft로 계산
     try {
-      const raw2 = localStorage.getItem(INTERVIEW_STORAGE_KEY);
+      const raw2 = userGetItem(INTERVIEW_STORAGE_KEY);
       if (!raw2) return null;
       const parsed = JSON.parse(raw2);
       const form = parsed?.form;
@@ -141,8 +144,8 @@ export default function DiagnosisHome({ onLogout }) {
   };
 
   const handleRestart = () => {
-    localStorage.removeItem(INTERVIEW_STORAGE_KEY);
-    localStorage.removeItem(HOME_SUMMARY_KEY);
+    userRemoveItem(INTERVIEW_STORAGE_KEY);
+    userRemoveItem(HOME_SUMMARY_KEY);
     setDraft(null);
     alert("진단 데이터를 초기화했습니다. 이제 인터뷰는 공백으로 시작됩니다.");
   };

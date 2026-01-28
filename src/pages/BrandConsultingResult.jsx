@@ -8,6 +8,9 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 // ✅ 필드 라벨(공용)
 const FIELD_LABELS = {
   companyName: "회사/프로젝트명",
@@ -355,9 +358,9 @@ export default function BrandConsultingResult({ onLogout }) {
   const draft = useMemo(() => {
     try {
       const raw =
-        localStorage.getItem(config.storageKey) ||
+        userGetItem(config.storageKey) ||
         (config.storageKeyFallback
-          ? localStorage.getItem(config.storageKeyFallback)
+          ? userGetItem(config.storageKeyFallback)
           : null);
       return raw ? JSON.parse(raw) : null;
     } catch {
@@ -398,7 +401,7 @@ export default function BrandConsultingResult({ onLogout }) {
   }, [draft]);
 
   const handleResetAll = () => {
-    config.resetKeys.forEach((k) => localStorage.removeItem(k));
+    config.resetKeys.forEach((k) => userRemoveItem(k));
     alert("해당 컨설팅 입력/결과 데이터를 초기화했습니다.");
     navigate(config.interviewPath);
   };

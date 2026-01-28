@@ -11,6 +11,13 @@ import ConsultingFlowMini from "../components/ConsultingFlowMini.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+} from "../utils/userLocalStorage.js";
+
 // ✅ 파이프라인(단계 잠금/결과 저장)
 import {
   ensureStepAccess,
@@ -156,10 +163,39 @@ function buildNamingPayload(
  *  - 백이 어떤 포맷을 주더라도 UI에서 쓰기 쉽게 3안 형태로 맞춤
  *  ====================== */
 function normalizeNamingCandidates(raw) {
-  // 1) 이미 배열로 온 경우
-  const list = Array.isArray(raw)
-    ? raw
-    : raw?.candidates || raw?.data?.candidates || raw?.result?.candidates;
+  // ✅ apiRequest는 보통 response.data만 반환하지만,
+  //    혹시 {data:{...}} / {result:{...}} 형태로 올 수도 있어 안전하게 풀어줌
+  const payload = raw?.data ?? raw?.result ?? raw;
+
+  // ✅ 케이스 0) 백이 { name1, name2, name3 } 형태로 주는 경우
+  // 예: {"name1":"Brandify","name2":"Cloudia","name3":"Truston"}
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const keys = ["name1", "name2", "name3"];
+    const values = keys
+      .map((k) => payload?.[k])
+      .filter((v) => typeof v === "string" && v.trim());
+
+    if (values.length) {
+      return values.slice(0, 3).map((name, idx) => ({
+        id: `name_${idx + 1}`,
+        name: `안 ${idx + 1}`,
+        oneLiner: name,
+        keywords: [],
+        style: "",
+        samples: [name],
+        rationale: "",
+        checks: [],
+        avoid: [],
+      }));
+    }
+  }
+
+  // 1) 이미 배열로 온 경우 / candidates 배열로 온 경우
+  const list = Array.isArray(payload)
+    ? payload
+    : payload?.candidates ||
+      payload?.data?.candidates ||
+      payload?.result?.candidates;
 
   if (!Array.isArray(list)) return [];
 
@@ -375,7 +411,7 @@ export default function NamingConsultingInterview({ onLogout }) {
   // ✅ draft 로드
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = userGetItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed?.form && typeof parsed.form === "object") {
@@ -447,7 +483,7 @@ export default function NamingConsultingInterview({ onLogout }) {
   // ✅ 결과 로드(후보/선택)
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(RESULT_KEY);
+      const raw = userGetItem(RESULT_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.candidates)) setCandidates(parsed.candidates);
@@ -464,7 +500,7 @@ export default function NamingConsultingInterview({ onLogout }) {
     const t = setTimeout(() => {
       try {
         const payload = { form, updatedAt: Date.now() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        userSetItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
       } catch {
@@ -480,7 +516,7 @@ export default function NamingConsultingInterview({ onLogout }) {
 
     // ✅ 이 페이지 전용 결과 저장
     try {
-      localStorage.setItem(
+      userSetItem(
         RESULT_KEY,
         JSON.stringify({
           candidates: nextCandidates,
@@ -497,7 +533,7 @@ export default function NamingConsultingInterview({ onLogout }) {
     try {
       const selected =
         nextCandidates.find((c) => c.id === nextSelectedId) || null;
-      localStorage.setItem(
+      userSetItem(
         LEGACY_KEY,
         JSON.stringify({
           form,
@@ -573,7 +609,7 @@ export default function NamingConsultingInterview({ onLogout }) {
       try {
         const interviewRes = await apiRequest("/brands/interview", {
           method: "POST",
-          body: payload,
+          data: payload,
         });
 
         const maybeBrandId =
@@ -586,13 +622,16 @@ export default function NamingConsultingInterview({ onLogout }) {
           interviewRes?.brand?.id ||
           null;
 
-        if (!brandId && maybeBrandId) {
-          brandId = maybeBrandId;
-          // pipeline에 brandId 저장(다음 단계에서도 사용)
-          try {
-            upsertPipeline({ brandId });
-          } catch {
-            // ignore
+        // ✅ 백이 brandId를 내려주면 항상 그 값을 우선 사용 (계정 변경/스토리지 꼬임 방지)
+        if (maybeBrandId) {
+          const normalized = Number(maybeBrandId);
+          if (!Number.isNaN(normalized)) {
+            brandId = normalized;
+            try {
+              upsertPipeline({ brandId });
+            } catch {
+              // ignore
+            }
           }
         }
       } catch (e) {
@@ -610,7 +649,7 @@ export default function NamingConsultingInterview({ onLogout }) {
       // 2) 네이밍 생성
       const namingRes = await apiRequest(`/brands/${brandId}/naming`, {
         method: "POST",
-        body: payload,
+        data: payload,
       });
 
       // 후보 normalize
@@ -627,7 +666,27 @@ export default function NamingConsultingInterview({ onLogout }) {
       persistResult(nextCandidates, null, nextSeed);
       scrollToResult();
     } catch (error) {
+      const status = error?.response?.status;
+
       console.error("Naming generate failed:", error);
+
+      // ✅ 401/403: 인증/권한 문제(토큰 만료, 다른 사람 brandId 접근 등)
+      if (status === 401 || status === 403) {
+        alert(
+          status === 401
+            ? "로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요."
+            : "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+
+        // 혹시 pipeline에 잘못된 brandId가 남아있을 수 있어 초기화(안전)
+        try {
+          upsertPipeline({ brandId: null });
+        } catch {
+          // ignore
+        }
+        return;
+      }
+
       alert(
         "네이밍 생성 요청에 실패했습니다. 콘솔과 네트워크 탭을 확인해주세요.",
       );
@@ -654,9 +713,9 @@ export default function NamingConsultingInterview({ onLogout }) {
     if (!ok) return;
 
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(RESULT_KEY);
-      localStorage.removeItem(LEGACY_KEY);
+      userRemoveItem(STORAGE_KEY);
+      userRemoveItem(RESULT_KEY);
+      userRemoveItem(LEGACY_KEY);
     } catch {
       // ignore
     }

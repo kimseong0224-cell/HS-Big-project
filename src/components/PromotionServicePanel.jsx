@@ -2,6 +2,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import {
+  userGetItem,
+  userSetItem,
+  userRemoveItem,
+} from "../utils/userLocalStorage.js";
+
 /**
  * ✅ 홍보물 컨설팅 서비스 선택 패널
  * - 홍보물 컨설팅은 단계형이 아니라 ‘각각 독립 서비스’
@@ -53,7 +60,7 @@ function safeParse(raw) {
 }
 
 function isDone(legacyKey) {
-  const parsed = safeParse(localStorage.getItem(legacyKey));
+  const parsed = safeParse(userGetItem(legacyKey));
   if (!parsed) return false;
   return Boolean(parsed?.selected || parsed?.selectedId);
 }
@@ -107,7 +114,10 @@ export default function PromotionServicePanel({ activeKey = "icon" }) {
       <div className="flowPanel__top">
         <div className="flowPanel__left">
           <span className="flowPill">{activeService?.label || "서비스"}</span>
-          <span className="flowPanel__mini">완료 {doneCount}/{SERVICES.length} · 각 서비스는 독립적으로 진행됩니다.</span>
+          <span className="flowPanel__mini">
+            완료 {doneCount}/{SERVICES.length} · 각 서비스는 독립적으로
+            진행됩니다.
+          </span>
         </div>
         <button
           type="button"
@@ -123,7 +133,11 @@ export default function PromotionServicePanel({ activeKey = "icon" }) {
         {SERVICES.map((s, i) => {
           const isActive = i === activeIndex;
           const isDoneState = doneMap[s.key];
-          const stateClass = isActive ? "active" : isDoneState ? "done" : "todo";
+          const stateClass = isActive
+            ? "active"
+            : isDoneState
+              ? "done"
+              : "todo";
 
           return (
             <li key={s.key} className={`flowStep ${stateClass}`}>
@@ -141,7 +155,7 @@ export default function PromotionServicePanel({ activeKey = "icon" }) {
                   <span className="flowStep__desc">{s.desc}</span>
                 </span>
               </button>
-</li>
+            </li>
           );
         })}
       </ol>
@@ -149,10 +163,12 @@ export default function PromotionServicePanel({ activeKey = "icon" }) {
       <div className="flowTip">
         <span className="flowTip__badge">TIP</span>
         <div className="flowTip__body">
-          <p className="flowTip__title">원하는 결과에 가까운 레퍼런스를 적어보세요</p>
+          <p className="flowTip__title">
+            원하는 결과에 가까운 레퍼런스를 적어보세요
+          </p>
           <p className="flowTip__text">
-            제품 특징, 타깃, 분위기(미니멀/프리미엄/발랄 등), 피하고 싶은 느낌을 구체적으로 적으면
-            후보 3안의 품질이 더 좋아집니다.
+            제품 특징, 타깃, 분위기(미니멀/프리미엄/발랄 등), 피하고 싶은 느낌을
+            구체적으로 적으면 후보 3안의 품질이 더 좋아집니다.
           </p>
         </div>
       </div>

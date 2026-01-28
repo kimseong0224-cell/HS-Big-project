@@ -8,6 +8,10 @@ import "../styles/SiteHeader.css";
 import { apiRequest, clearAccessToken } from "../api/client.js";
 import { clearCurrentUserId, clearIsLoggedIn } from "../api/auth.js";
 
+// ✅ 사용자별 localStorage 분리/정리 (user1→logout→user2 로그인 시 데이터 노출 방지)
+import { removeLegacyKeys } from "../utils/userLocalStorage.js";
+import { USER_DATA_KEYS } from "../utils/userDataKeys.js";
+
 import {
   ensureStepAccess,
   readPipeline,
@@ -302,6 +306,10 @@ export default function SiteHeader({ onLogout, onBrandPick, onPromoPick }) {
     clearAccessToken();
     clearCurrentUserId();
     clearIsLoggedIn();
+
+    // ✅ 레거시(스코프 없는) 사용자 데이터 정리
+    // - 과거 버전에서 저장된 값이 남아있으면, 다른 계정에서 노출될 수 있어 제거
+    removeLegacyKeys(USER_DATA_KEYS);
 
     // ✅ 부모에서 추가 정리하고 싶으면(onLogout) 호출
     if (typeof onLogout === "function") onLogout();

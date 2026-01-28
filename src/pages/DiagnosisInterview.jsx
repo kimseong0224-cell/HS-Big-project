@@ -11,6 +11,9 @@ import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 // ✅ 백 연동
 import { apiRequest } from "../api/client.js";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem } from "../utils/userLocalStorage.js";
+
 const STORAGE_KEY = "diagnosisInterviewDraft_v1";
 const HOME_SUMMARY_KEY = "diagnosisDraft";
 
@@ -174,7 +177,7 @@ export default function DiagnosisInterview({ onLogout }) {
         stageLabel: currentSectionLabel,
         updatedAt: updatedAtTs,
       };
-      localStorage.setItem(HOME_SUMMARY_KEY, JSON.stringify(summary));
+      userSetItem(HOME_SUMMARY_KEY, JSON.stringify(summary));
     } catch {
       // ignore
     }
@@ -183,7 +186,7 @@ export default function DiagnosisInterview({ onLogout }) {
   // ✅ draft 로드
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = userGetItem(STORAGE_KEY);
       if (!raw) {
         setLoaded(true);
         return;
@@ -224,7 +227,7 @@ export default function DiagnosisInterview({ onLogout }) {
     const t = setTimeout(() => {
       try {
         const payload = { form, updatedAt: Date.now() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        userSetItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
         saveHomeSummary(payload.updatedAt);
@@ -287,7 +290,7 @@ export default function DiagnosisInterview({ onLogout }) {
         stageLabel: currentSectionLabel,
         updatedAt: Date.now(),
       };
-      localStorage.setItem(HOME_SUMMARY_KEY, JSON.stringify(payload));
+      userSetItem(HOME_SUMMARY_KEY, JSON.stringify(payload));
     } catch {
       // ignore
     }
@@ -319,7 +322,7 @@ export default function DiagnosisInterview({ onLogout }) {
       };
 
       try {
-        localStorage.setItem(
+        userSetItem(
           DIAGNOSIS_RESULT_KEY,
           JSON.stringify(resultPayload),
         );

@@ -8,6 +8,9 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 const STORAGE_KEY = "promoDigitalInterviewDraft_v1";
 
 export default function DigitalImageConsultingInterview({ onLogout }) {
@@ -109,7 +112,7 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
   // ✅ draft 로드
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = userGetItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed?.form) setForm((prev) => ({ ...prev, ...parsed.form }));
@@ -128,7 +131,7 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
     const t = setTimeout(() => {
       try {
         const payload = { form, updatedAt: Date.now() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        userSetItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
       } catch {
@@ -146,7 +149,7 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
   const handleTempSave = () => {
     try {
       const payload = { form, updatedAt: Date.now() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      userSetItem(STORAGE_KEY, JSON.stringify(payload));
       setLastSaved(new Date(payload.updatedAt).toLocaleString());
       setSaveMsg("임시 저장 완료");
     } catch {
@@ -197,7 +200,7 @@ export default function DigitalImageConsultingInterview({ onLogout }) {
     };
 
     const payload = { form: resultForm, updatedAt: Date.now() };
-    localStorage.setItem("promoInterview_digital_v1", JSON.stringify(payload));
+    userSetItem("promoInterview_digital_v1", JSON.stringify(payload));
 
     navigate("/promotion/result?service=digital");
   };

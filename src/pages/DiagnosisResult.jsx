@@ -8,6 +8,9 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 const DIAGNOSIS_RESULT_KEY = "diagnosisResult_v1";
 const DIAGNOSIS_DRAFT_KEY = "diagnosisInterviewDraft_v1"; // 인터뷰 폼(회사명/문제/페르소나 등)
 const HOME_SUMMARY_KEY = "diagnosisDraft"; // 진행상태(퍼센트/완료개수/마지막저장 등)
@@ -61,17 +64,17 @@ export default function DiagnosisResult({ onLogout }) {
 
   // ✅ 결과(localStorage)
   const storedResult = useMemo(() => {
-    return safeParse(localStorage.getItem(DIAGNOSIS_RESULT_KEY));
+    return safeParse(userGetItem(DIAGNOSIS_RESULT_KEY));
   }, []);
 
   // ✅ 인터뷰 폼(localStorage) -> 요약 카드에 사용
   const storedDraft = useMemo(() => {
-    return safeParse(localStorage.getItem(DIAGNOSIS_DRAFT_KEY));
+    return safeParse(userGetItem(DIAGNOSIS_DRAFT_KEY));
   }, []);
 
   // ✅ 홈 진행 요약(localStorage) -> 우측 진행상태 카드에 사용
   const storedSummary = useMemo(() => {
-    return safeParse(localStorage.getItem(HOME_SUMMARY_KEY));
+    return safeParse(userGetItem(HOME_SUMMARY_KEY));
   }, []);
 
   // ✅ 결과 데이터 우선순위: state → localStorage
@@ -149,9 +152,9 @@ export default function DiagnosisResult({ onLogout }) {
   const handleReset = () => {
     // ✅ “처음부터 다시하기(초기화)”
     try {
-      localStorage.removeItem(DIAGNOSIS_RESULT_KEY);
-      localStorage.removeItem(DIAGNOSIS_DRAFT_KEY);
-      localStorage.removeItem(HOME_SUMMARY_KEY);
+      userRemoveItem(DIAGNOSIS_RESULT_KEY);
+      userRemoveItem(DIAGNOSIS_DRAFT_KEY);
+      userRemoveItem(HOME_SUMMARY_KEY);
     } catch {
       // ignore
     }

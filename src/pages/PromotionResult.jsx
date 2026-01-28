@@ -5,6 +5,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader.jsx";
 import SiteFooter from "../components/SiteFooter.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 const SERVICE_MAP = {
   icon: {
     label: "제품 아이콘 컨설팅",
@@ -51,7 +54,7 @@ export default function PromotionResult({ onLogout }) {
   const service = query.get("service") || "icon";
   const meta = SERVICE_MAP[service] || SERVICE_MAP.icon;
 
-  const data = useMemo(() => safeParse(localStorage.getItem(meta.resultKey)), [meta.resultKey]);
+  const data = useMemo(() => safeParse(userGetItem(meta.resultKey)), [meta.resultKey]);
 
   const selected = useMemo(() => {
     if (!data) return null;

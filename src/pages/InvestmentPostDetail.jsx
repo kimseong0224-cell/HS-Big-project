@@ -7,10 +7,12 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 import { apiRequest } from "../api/client.js";
+import { getCurrentUserId } from "../api/auth.js";
 
 export default function InvestmentPostDetail({ onLogout }) {
   const navigate = useNavigate();
   const { id } = useParams();
+  const currentUserId = getCurrentUserId();
 
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
@@ -21,13 +23,42 @@ export default function InvestmentPostDetail({ onLogout }) {
 
   useEffect(() => {
     let mounted = true;
+
     const fetchPost = async () => {
       setLoading(true);
       setError("");
       try {
         const data = await apiRequest(`/brands/posts/${id}`);
+
+        const normalizeBool = (v) => {
+          if (typeof v === "boolean") return v;
+          if (v === "true") return true;
+          if (v === "false") return false;
+          return null;
+        };
+
+        // 작성자 식별자(백이 내려주는 필드 이름이 프로젝트마다 다를 수 있어 대응)
+        const authorId =
+          data?.userId ??
+          data?.authorId ??
+          data?.memberId ??
+          data?.loginId ??
+          data?.createdBy ??
+          null;
+
+        // ✅ 백에서 owner/isOwner/mine 같은 boolean을 내려주면 우선 사용
+        // ✅ 없으면 currentUserId vs authorId로 fallback 판단
+        const ownerFlag = normalizeBool(
+          data?.owner ?? data?.isOwner ?? data?.mine ?? data?.isMine ?? null,
+        );
+
+        const computedOwner =
+          currentUserId &&
+          authorId &&
+          String(currentUserId) === String(authorId);
+
         const mapped = {
-          id: data?.postId,
+          id: data?.postId ?? id,
           company: data?.companyName || "",
           oneLiner: data?.shortDescription || "",
           logoImageUrl: data?.logoImageUrl || "",
@@ -36,9 +67,14 @@ export default function InvestmentPostDetail({ onLogout }) {
           hashtags: Array.isArray(data?.hashtags) ? data.hashtags : [],
           contactName: data?.contactName || "",
           contactEmail: data?.contactEmail || "",
+          website: data?.website || data?.homepage || "",
           summary: data?.companyDescription || "",
           updatedAt: data?.updatedAt ? data.updatedAt.slice(0, 10) : "",
+          authorId,
+          isOwner:
+            ownerFlag === null ? Boolean(computedOwner) : Boolean(ownerFlag),
         };
+
         if (mounted) setItem(mapped);
       } catch (err) {
         console.error(err);
@@ -47,15 +83,17 @@ export default function InvestmentPostDetail({ onLogout }) {
         if (mounted) setLoading(false);
       }
     };
+
     fetchPost();
+
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, currentUserId]);
 
   const tags = useMemo(() => {
     if (!item || !Array.isArray(item.hashtags)) return [];
-    return item.hashtags.map((tag) => tag.trim()).filter(Boolean);
+    return item.hashtags.map((tag) => String(tag).trim()).filter(Boolean);
   }, [item]);
 
   const metaItems = useMemo(() => {
@@ -149,13 +187,27 @@ export default function InvestmentPostDetail({ onLogout }) {
               투자 라운지에 등록된 기업의 상세 정보를 확인할 수 있습니다.
             </p>
           </div>
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => navigate("/investment")}
-          >
-            목록으로
-          </button>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {/* ✅ 작성자일 때만 수정 버튼 노출 */}
+            {item.isOwner ? (
+              <button
+                type="button"
+                className="btn primary"
+                onClick={() => navigate(`/investment/edit/${item.id}`)}
+              >
+                수정
+              </button>
+            ) : null}
+
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={() => navigate("/investment")}
+            >
+              목록으로
+            </button>
+          </div>
         </div>
 
         <div className="invest-detail-grid">
@@ -216,7 +268,7 @@ export default function InvestmentPostDetail({ onLogout }) {
                 </li>
                 <li className="invest-detail-fields-group">
                   <strong>홈페이지</strong>
-                  <span>-</span>
+                  <span>{item.website ? item.website : "-"}</span>
                 </li>
                 <li>
                   <strong>담당자</strong>

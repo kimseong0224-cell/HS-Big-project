@@ -5,6 +5,9 @@ import { useNavigate } from "react-router-dom";
 import SiteHeader from "../components/SiteHeader.jsx";
 import SiteFooter from "../components/SiteFooter.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 function safeParse(raw) {
   try {
     return raw ? JSON.parse(raw) : null;
@@ -64,8 +67,8 @@ export default function PromotionAllResults({ onLogout }) {
 
   const cards = useMemo(() => {
     return SERVICES.map((s) => {
-      const result = safeParse(localStorage.getItem(s.resultKey));
-      const draft = safeParse(localStorage.getItem(s.draftKey));
+      const result = safeParse(userGetItem(s.resultKey));
+      const draft = safeParse(userGetItem(s.draftKey));
 
       const selectedId = result?.selectedId || result?.selected?.id;
       const selected =

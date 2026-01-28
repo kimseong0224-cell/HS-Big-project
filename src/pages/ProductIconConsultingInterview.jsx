@@ -9,6 +9,9 @@ import PromotionServicePanel from "../components/PromotionServicePanel.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 
+// ✅ 사용자별 localStorage 분리(계정마다 독립 진행)
+import { userGetItem, userSetItem, userRemoveItem } from "../utils/userLocalStorage.js";
+
 /**
  * ✅ 홍보물 컨설팅 (독립 서비스)
  * - 제품 아이콘 컨설팅
@@ -209,7 +212,7 @@ export default function ProductIconConsultingInterview({ onLogout }) {
   // ✅ 기업 진단&인터뷰 기본 정보 자동 반영 (중복 질문 제거)
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("diagnosisInterviewDraft_v1");
+      const raw = userGetItem("diagnosisInterviewDraft_v1");
       if (!raw) return;
       const parsed = JSON.parse(raw);
       const diag = parsed?.form || parsed;
@@ -228,7 +231,7 @@ export default function ProductIconConsultingInterview({ onLogout }) {
 const handleTempSave = () => {
     try {
       const payload = { form, candidates, selectedId, updatedAt: Date.now() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      userSetItem(STORAGE_KEY, JSON.stringify(payload));
       setLastSaved(new Date(payload.updatedAt).toLocaleString());
       setSaveMsg("임시 저장 완료");
     } catch {
@@ -272,10 +275,10 @@ const handleTempSave = () => {
       selectedId: "",
       updatedAt: Date.now(),
     };
-    localStorage.setItem(RESULT_KEY, JSON.stringify(resultPayload));
+    userSetItem(RESULT_KEY, JSON.stringify(resultPayload));
 
     // (히스토리/마이페이지 표시용)
-    localStorage.setItem(
+    userSetItem(
       LEGACY_KEY,
       JSON.stringify({
         updatedAt: resultPayload.updatedAt,
@@ -304,8 +307,8 @@ const handleTempSave = () => {
       selected,
       updatedAt: Date.now(),
     };
-    localStorage.setItem(RESULT_KEY, JSON.stringify(payload));
-    localStorage.setItem(
+    userSetItem(RESULT_KEY, JSON.stringify(payload));
+    userSetItem(
       LEGACY_KEY,
       JSON.stringify({
         updatedAt: payload.updatedAt,
@@ -322,7 +325,7 @@ const handleTempSave = () => {
 
   // ✅ draft/result 로드
   useEffect(() => {
-    const rawDraft = localStorage.getItem(STORAGE_KEY);
+    const rawDraft = userGetItem(STORAGE_KEY);
     const draft = rawDraft ? safeParse(rawDraft) : null;
     if (draft?.form) setForm((prev) => ({ ...prev, ...draft.form }));
     if (Array.isArray(draft?.candidates)) setCandidates(draft.candidates);
@@ -332,7 +335,7 @@ const handleTempSave = () => {
       if (!Number.isNaN(d.getTime())) setLastSaved(d.toLocaleString());
     }
 
-    const rawResult = localStorage.getItem(RESULT_KEY);
+    const rawResult = userGetItem(RESULT_KEY);
     const result = rawResult ? safeParse(rawResult) : null;
     if (result?.form) setForm((prev) => ({ ...prev, ...result.form }));
     if (Array.isArray(result?.candidates)) setCandidates(result.candidates);
@@ -345,7 +348,7 @@ const handleTempSave = () => {
     const t = setTimeout(() => {
       try {
         const payload = { form, candidates, selectedId, updatedAt: Date.now() };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        userSetItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
       } catch {

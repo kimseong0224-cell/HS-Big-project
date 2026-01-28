@@ -8,7 +8,6 @@ import SiteFooter from "../components/SiteFooter.jsx";
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
 import { apiRequest } from "../api/client.js";
-import { getCurrentUserId } from "../api/auth.js";
 
 export default function InvestmentBoard({ onLogout }) {
   const navigate = useNavigate();
@@ -26,7 +25,6 @@ export default function InvestmentBoard({ onLogout }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const currentUserId = getCurrentUserId();
 
   useEffect(() => {
     let mounted = true;
@@ -245,12 +243,6 @@ export default function InvestmentBoard({ onLogout }) {
                 .filter(Boolean)
                 .join(", ");
               const detailPath = `/investment/${it.id}`;
-              const editPath = `/investment/edit/${it.id}`;
-              const isOwner =
-                currentUserId &&
-                it.authorId &&
-                String(currentUserId) === String(it.authorId);
-              const targetPath = isOwner ? editPath : detailPath;
 
               return (
                 <article
@@ -258,10 +250,10 @@ export default function InvestmentBoard({ onLogout }) {
                   className="invest-preview invest-preview--board"
                   role="button"
                   tabIndex={0}
-                  onClick={() => navigate(targetPath)}
+                  onClick={() => navigate(detailPath)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ")
-                      navigate(targetPath);
+                      navigate(detailPath);
                   }}
                 >
                   <div className="invest-preview-top">
