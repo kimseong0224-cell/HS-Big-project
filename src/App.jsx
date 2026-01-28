@@ -44,6 +44,7 @@ import InvestmentPostDetail from "./pages/InvestmentPostDetail.jsx";
 import InvestmentPostEdit from "./pages/InvestmentPostEdit.jsx";
 
 import ChatbotWidget from "./components/ChatbotWidget.jsx";
+import CurrentUserWidget from "./components/CurrentUserWidget.jsx";
 
 import {
   abortBrandFlow,
@@ -99,6 +100,9 @@ export default function App() {
     "/easylogin",
   ];
   const shouldHideChatbot = hideChatbotPaths.includes(pathname);
+
+  // ✅ 우측 상단 유저 위젯도 로그인/회원가입 관련 페이지에서는 숨김
+  const shouldHideUserWidget = hideChatbotPaths.includes(pathname);
 
   return (
     <>
@@ -202,6 +206,9 @@ export default function App() {
         {/* ✅ 없는 경로는 메인으로 */}
         <Route path="*" element={<Navigate to="/main" replace />} />
       </Routes>
+
+      {/* ✅ 우측 상단 유저 위젯(현재 로그인 계정) */}
+      {!shouldHideUserWidget && <CurrentUserWidget />}
 
       {/* ✅ 챗봇은 라우트 아래에 떠 있게 */}
       {!shouldHideChatbot && (
