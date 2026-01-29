@@ -1,10 +1,12 @@
-// src/pages/AICutModelConsultingInterview.jsx
+// src/pages/BrandStoryConsultingInterview.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import SiteHeader from "../components/SiteHeader.jsx";
 import SiteFooter from "../components/SiteFooter.jsx";
-import PromotionServicePanel from "../components/PromotionServicePanel.jsx";
+
+import ConsultingFlowPanel from "../components/ConsultingFlowPanel.jsx";
+import ConsultingFlowMini from "../components/ConsultingFlowMini.jsx";
 
 import PolicyModal from "../components/PolicyModal.jsx";
 import { PrivacyContent, TermsContent } from "../components/PolicyContents.jsx";
@@ -17,209 +19,501 @@ import {
 } from "../utils/userLocalStorage.js";
 
 import {
-  addPromoReport,
-  createPromoReportSnapshot,
-} from "../utils/reportHistory.js";
+  ensureStrictStepAccess,
+  setBrandFlowCurrent,
+  markBrandFlowPendingAbort,
+  consumeBrandFlowPendingAbort,
+  abortBrandFlow,
+  setStepResult,
+  clearStepsFrom,
+  readPipeline,
+} from "../utils/brandPipelineStorage.js";
 
-/**
- * ✅ 홍보물 컨설팅 (독립 서비스)
- * - AI컷 모델 컨설팅
- * - 브랜드 컨설팅 인터뷰(ConceptConsultingInterview)와 유사한 레이아웃/진행 UI
- * - 필수 입력 완료 → AI 컨설팅 생성(후보 3안) → 1안 선택 → 결과 페이지
- */
+// ✅ 백 연동(이미 프로젝트에 존재하는 클라이언트 사용)
+import { apiRequest } from "../api/client.js";
 
-const STORAGE_KEY = "promoInterviewDraft_aicut_v1";
-const RESULT_KEY = "promoInterviewResult_aicut_v1";
-const LEGACY_KEY = "promo_aicut_v1"; // (마이페이지/히스토리용)
+const STORAGE_KEY = "brandStoryConsultingInterviewDraft_v1";
+const RESULT_KEY = "brandStoryConsultingInterviewResult_v1";
+const LEGACY_KEY = "brandInterview_story_v1";
+const NEXT_PATH = "/brand/logo/interview";
+
+const DIAG_KEYS = ["diagnosisInterviewDraft_v1", "diagnosisInterviewDraft"];
+
+function safeText(v, fallback = "") {
+  const s = String(v ?? "").trim();
+  return s ? s : fallback;
+}
+
+function stageLabel(v) {
+  const s = String(v || "")
+    .trim()
+    .toLowerCase();
+  if (!s) return "-";
+  if (s === "idea") return "아이디어";
+  if (s === "mvp") return "MVP";
+  if (s === "pmf") return "PMF";
+  if (s === "revenue" || s === "early_revenue") return "매출";
+  if (s === "invest") return "투자";
+  if (s === "scaleup" || s === "scaling") return "스케일업";
+  if (s === "rebrand") return "리브랜딩";
+  return String(v);
+}
 
 function safeParse(raw) {
   try {
-    return JSON.parse(raw);
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 }
 
-function compactList(text) {
-  return String(text || "")
-    .split(/[,\n]/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .slice(0, 10);
+function readDiagnosisForm() {
+  for (const k of DIAG_KEYS) {
+    const parsed = safeParse(userGetItem(k));
+    if (!parsed) continue;
+    const form =
+      parsed?.form && typeof parsed.form === "object" ? parsed.form : parsed;
+    if (form && typeof form === "object") return form;
+  }
+  return null;
 }
 
-function buildAICutPrompt({
-  brandName,
-  productName,
-  productCategory,
-  targetCustomer,
-  targetPlatform,
-  keywords,
-  tone,
-  usage,
-  colorPref,
-  mustInclude,
-  constraints,
-  references,
-}) {
-  const keys = compactList(keywords).join(", ");
-  const brand = brandName?.trim() ? brandName.trim() : "브랜드";
-  const product = productName?.trim() ? productName.trim() : "제품";
-  const cat = productCategory?.trim() ? productCategory.trim() : "product";
-  const mood = tone?.trim() ? tone.trim() : "clean lifestyle";
-  const platform = targetPlatform?.trim()
-    ? targetPlatform.trim()
-    : "e-commerce";
-  const customer = targetCustomer?.trim()
-    ? targetCustomer.trim()
-    : "target customer";
-
-  const parts = [
-    `High-quality realistic photo of a professional model showcasing ${brand}'s ${product} (${cat}).`,
-    `Mood: ${mood}.`,
-    `For: ${platform} / ${customer}.`,
-    usage?.trim() ? `Shot purpose: ${usage.trim()}.` : null,
-    keys ? `Keywords: ${keys}.` : null,
-    colorPref?.trim() ? `Color tone: ${colorPref.trim()}.` : null,
-    mustInclude?.trim() ? `Must include: ${mustInclude.trim()}.` : null,
-    references?.trim() ? `Reference: ${references.trim()}.` : null,
-    constraints?.trim() ? `Avoid: ${constraints.trim()}.` : null,
-    "Lighting: soft yet crisp, natural skin tones, premium commercial photography.",
-    "Composition: product clearly visible, clean background, no text, no watermark, no logo overlay.",
-    "Ultra-detailed, 4k, sharp focus, realistic materials and reflections.",
-  ].filter(Boolean);
-
-  return parts.join(" ");
+function isFilled(v) {
+  if (Array.isArray(v)) return v.length > 0;
+  return Boolean(String(v ?? "").trim());
 }
 
-function makeCandidates(form) {
-  const baseTone = form.tone?.trim() || "클린·라이프스타일";
-  const keyTop =
-    compactList(form.keywords).slice(0, 5).join(" · ") || "핵심 키워드";
+/** ✅ multiple 선택용 칩 UI */
+function MultiChips({ value, options, onChange, max = null }) {
+  const current = Array.isArray(value) ? value : [];
 
-  const variants = [
-    {
-      id: "a",
-      name: "클린 스튜디오 모델컷",
-      summary: [
-        "흰/연회색 배경 + 소프트박스 조명으로 제품 디테일 강조",
-        `톤: ${baseTone} (정갈, 깔끔, 상업 촬영)`,
-        "상세페이지 메인컷/썸네일에 최적화",
-      ],
-      prompt: buildAICutPrompt({ ...form, tone: `${baseTone}, clean studio` }),
-      do: [
-        "제품이 화면 중심에 오게",
-        "손/표정 과장 없이 자연스럽게",
-        "배경 요소 최소화",
-      ],
-      dont: ["과한 필터", "텍스트/로고 삽입", "제품 가림/흐림"],
-    },
-    {
-      id: "b",
-      name: "데일리 라이프스타일 컷",
-      summary: [
-        "일상 공간에서 ‘사용 장면’을 보여주는 자연광 무드",
-        `키워드: ${keyTop}`,
-        "SNS/광고 소재로 ‘공감’과 ‘체험감’ 강화",
-      ],
-      prompt: buildAICutPrompt({
-        ...form,
-        tone: `${baseTone}, natural lifestyle`,
-      }),
-      do: [
-        "사용 상황을 1~2개로 좁히기",
-        "소품은 기능을 보조하는 수준",
-        "자연스러운 포즈",
-      ],
-      dont: ["배경이 너무 복잡", "제품이 작은 비중", "과도한 과장 연출"],
-    },
-    {
-      id: "c",
-      name: "프리미엄 시네마틱 컷",
-      summary: [
-        "다크 톤 배경 + 림라이트로 고급스러운 분위기",
-        "재질/반사/입체감을 강조해 ‘프리미엄’ 포지셔닝",
-        "고가 제품/리미티드/브랜드 캠페인에 적합",
-      ],
-      prompt: buildAICutPrompt({
-        ...form,
-        tone: `${baseTone}, premium cinematic`,
-      }),
-      do: [
-        "색상 대비를 2~3개로 제한",
-        "광원 방향을 명확히",
-        "제품 질감이 살아나게",
-      ],
-      dont: ["노이즈/저해상도", "과한 렌즈 왜곡", "불필요한 텍스트"],
-    },
+  const toggle = (opt) => {
+    const exists = current.includes(opt);
+    let next = exists ? current.filter((x) => x !== opt) : [...current, opt];
+
+    if (typeof max === "number" && max > 0 && next.length > max) {
+      next = next.slice(0, max);
+    }
+    onChange(next);
+  };
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((opt) => {
+        const active = current.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            aria-pressed={active}
+            onClick={() => toggle(opt)}
+            style={{
+              fontSize: 12,
+              fontWeight: 800,
+              padding: "6px 10px",
+              borderRadius: 999,
+              background: active ? "rgba(99,102,241,0.12)" : "rgba(0,0,0,0.04)",
+              border: active
+                ? "1px solid rgba(99,102,241,0.25)"
+                : "1px solid rgba(0,0,0,0.10)",
+              color: "rgba(0,0,0,0.78)",
+              cursor: "pointer",
+            }}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const STORY_PLOT_OPTIONS = ["문제 해결형", "비전 제시형", "탄생 신화형"];
+const STORY_EMOTION_OPTIONS = ["안도감", "호기심"];
+
+function generateStoryCandidates(form, seed = 0) {
+  const companyName = safeText(form?.companyName, "우리");
+  const industry = safeText(form?.industry, "분야");
+  const stage = stageLabel(form?.stage);
+  const target = safeText(form?.targetCustomer, "고객");
+  const oneLine = safeText(form?.oneLine, "");
+
+  const founding = safeText(form?.founding_story, "");
+  const transformation = safeText(form?.customer_transformation, "");
+  const mission = safeText(form?.brand_mission, "");
+  const conflict = safeText(form?.customer_conflict, "");
+  const ultimate = safeText(form?.ultimate_goal, "");
+
+  const plots = Array.isArray(form?.story_plot) ? form.story_plot : [];
+  const emotions = Array.isArray(form?.story_emotion) ? form.story_emotion : [];
+
+  const pick = (arr, idx) => arr[(idx + seed) % arr.length];
+
+  const hooks = [
+    "왜 좋은 선택이 늘 어려울까요?",
+    "고객의 하루는 늘 방해물로 가득합니다.",
+    "우리는 ‘당연한 불편’을 당연하게 넘기지 않았습니다.",
+    "작은 결핍이 큰 포기로 이어지는 순간이 있습니다.",
   ];
 
-  return variants;
+  const endings = [
+    "우리는 오늘도 고객이 더 쉽게, 더 확신 있게 앞으로 나아가도록 돕습니다.",
+    "우리는 고객이 멈추는 지점에서 다시 움직이게 만드는 브랜드가 되겠습니다.",
+    "우리는 더 나은 내일을 ‘실행 가능한 이야기’로 만들겠습니다.",
+  ];
+
+  const baseMeta = () => ({
+    oneLiner: oneLine
+      ? `“${oneLine}”`
+      : `“${ultimate || mission || "브랜드 스토리"}”`,
+    meta: `${industry} · ${stage} · 타깃: ${target}`,
+    emotions: emotions.length ? emotions : ["안도감"],
+  });
+
+  const buildStory = (plotType) => {
+    const hook = pick(hooks, 0);
+    const end = pick(endings, 1);
+
+    const pFounding = founding
+      ? `【창업 계기】\n${founding}`
+      : `【창업 계기】\n시작은 작은 질문에서 출발했습니다. “${hook}”`;
+
+    const pConflict = conflict
+      ? `【고객의 결핍/방해물】\n${conflict}`
+      : `【고객의 결핍/방해물】\n${target}은(는) 중요한 순간에 ‘정보/시간/확신’의 결핍으로 흔들립니다.`;
+
+    const pTransform = transformation
+      ? `【사용 전/후 변화】\n${transformation}`
+      : `【사용 전/후 변화】\n사용 전에는 고민이 길어지고 실행이 끊기지만, 사용 후에는 선택이 빨라지고 실행이 이어집니다.`;
+
+    const pMission = mission
+      ? `【미션】\n${mission}`
+      : `【미션】\n우리는 수익을 넘어, 고객이 더 나은 결정을 내리고 지속적으로 성장하도록 돕고자 합니다.`;
+
+    const pUltimate = ultimate
+      ? `【궁극적 목표】\n${ultimate}`
+      : `【궁극적 목표】\n우리는 ‘더 쉽고 더 신뢰할 수 있는 선택’이 당연한 세상을 만들고자 합니다.`;
+
+    const emoLine = `【자극하고 싶은 감정】 ${(emotions.length
+      ? emotions
+      : ["안도감"]
+    ).join(" · ")}`;
+
+    if (plotType === "문제 해결형") {
+      return {
+        plot: plotType,
+        story: [
+          `【훅】 ${hook}`,
+          pConflict,
+          pFounding,
+          pTransform,
+          pMission,
+          pUltimate,
+          emoLine,
+          `【마무리】 ${end}`,
+        ].join("\n\n"),
+        ending: end,
+      };
+    }
+
+    if (plotType === "비전 제시형") {
+      return {
+        plot: plotType,
+        story: [
+          `【훅】 우리가 꿈꾸는 미래는 분명합니다.`,
+          pUltimate,
+          pMission,
+          pConflict,
+          pTransform,
+          pFounding,
+          emoLine,
+          `【마무리】 ${end}`,
+        ].join("\n\n"),
+        ending: end,
+      };
+    }
+
+    return {
+      plot: plotType,
+      story: [
+        `【훅】 이 이야기는 ‘왜 시작했는가’에서 시작합니다.`,
+        pFounding,
+        pMission,
+        pConflict,
+        pTransform,
+        pUltimate,
+        emoLine,
+        `【마무리】 ${end}`,
+      ].join("\n\n"),
+      ending: end,
+    };
+  };
+
+  const plotPool = plots.length ? plots : STORY_PLOT_OPTIONS;
+
+  const p1 = pick(plotPool, 0);
+  const p2 = pick(plotPool, 1);
+  const p3 = pick(plotPool, 2);
+
+  const mk = (id, name, plotType, variantSeed) => {
+    const { plot, story, ending } = buildStory(plotType);
+    const meta = baseMeta();
+
+    const keywords = Array.from(
+      new Set([
+        industry,
+        stage,
+        plot,
+        ...(meta.emotions || []),
+        "스토리",
+        "브랜드",
+        companyName,
+      ]),
+    ).slice(0, 10);
+
+    const altHook = pick(hooks, variantSeed);
+    const altEnd = pick(endings, variantSeed);
+
+    const story2 =
+      variantSeed === 0
+        ? story
+        : story.replace(/【훅】.*\n?/m, (m) =>
+            m.replace(/【훅】.*/, `【훅】 ${altHook}`),
+          );
+
+    return {
+      id,
+      name,
+      oneLiner: meta.oneLiner,
+      meta: meta.meta,
+      plot,
+      emotions: meta.emotions,
+      story: story2,
+      ending: variantSeed === 0 ? ending : altEnd,
+      keywords,
+    };
+  };
+
+  return [
+    mk("story_1", "A · 문제 해결형", p1, 0),
+    mk("story_2", "B · 비전 제시형", p2, 1),
+    mk("story_3", "C · 탄생 신화형", p3, 2),
+  ];
 }
 
-export default function AICutModelConsultingInterview({ onLogout }) {
+const INITIAL_FORM = {
+  companyName: "",
+  industry: "",
+  stage: "",
+  website: "",
+  oneLine: "",
+  targetCustomer: "",
+
+  founding_story: "",
+  customer_transformation: "",
+  brand_mission: "",
+  story_plot: [],
+  customer_conflict: "",
+  story_emotion: [],
+  ultimate_goal: "",
+
+  notes: "",
+};
+
+/** ======================
+ *  백 응답 후보 normalize (스토리)
+ *  - 백이 어떤 포맷을 주더라도 UI에서 쓰기 쉽게 3안 형태로 맞춤
+ *  - 현재 백(Mock): { story1, story2, story3 }
+ *  ====================== */
+function normalizeStoryCandidates(raw, form = {}) {
+  const payload = raw?.data ?? raw?.result ?? raw;
+
+  const pickStr = (v) => (typeof v === "string" ? v.trim() : "");
+  const tryKeys = (obj, keys) => {
+    for (const k of keys) {
+      const v = pickStr(obj?.[k]);
+      if (v) return v;
+    }
+    return "";
+  };
+
+  // ✅ 케이스 0) { story1, story2, story3 }
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const values = ["story1", "story2", "story3"]
+      .map((k) => pickStr(payload?.[k]))
+      .filter(Boolean);
+
+    if (values.length) {
+      const metaParts = [
+        safeText(form?.industry, ""),
+        stageLabel(form?.stage),
+        safeText(form?.targetCustomer, ""),
+      ].filter((v) => v && v !== "-");
+
+      const meta = metaParts.join(" · ");
+      const emotions = Array.isArray(form?.story_emotion)
+        ? form.story_emotion
+        : [];
+      const plot = safeText(form?.story_plot, "") || "-";
+
+      return values.slice(0, 3).map((story, idx) => {
+        const firstLine =
+          story
+            .split("\n")
+            .find((ln) => ln.trim())
+            ?.trim() || story;
+        return {
+          id: `story_${idx + 1}`,
+          name: `안 ${idx + 1}`,
+          oneLiner:
+            firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine,
+          meta,
+          story,
+          plot,
+          emotions,
+          ending: "-",
+          keywords: [],
+          raw: story,
+        };
+      });
+    }
+  }
+
+  // ✅ 케이스 1) 배열 / candidates 배열
+  const list = Array.isArray(payload)
+    ? payload
+    : payload?.candidates ||
+      payload?.stories ||
+      payload?.data?.candidates ||
+      payload?.result?.candidates;
+
+  if (!Array.isArray(list)) return [];
+
+  // ["스토리1","스토리2"] 형태
+  if (list.length && typeof list[0] === "string") {
+    return list.slice(0, 3).map((story, idx) => ({
+      id: `story_${idx + 1}`,
+      name: `안 ${idx + 1}`,
+      oneLiner: story.length > 60 ? `${story.slice(0, 60)}…` : story,
+      meta: "",
+      story,
+      plot: "-",
+      emotions: [],
+      ending: "-",
+      keywords: [],
+      raw: story,
+    }));
+  }
+
+  // 객체 배열(유연 대응)
+  return list.slice(0, 3).map((item, idx) => {
+    const id = item?.id || item?.candidateId || `story_${idx + 1}`;
+    const story =
+      pickStr(item?.story) ||
+      pickStr(item?.text) ||
+      pickStr(item?.content) ||
+      pickStr(item?.value) ||
+      tryKeys(item, ["story1", "story2", "story3"]) ||
+      "";
+
+    const firstLine =
+      story
+        .split("\n")
+        .find((ln) => ln.trim())
+        ?.trim() || story;
+
+    return {
+      id,
+      name: item?.name || item?.title || `안 ${idx + 1}`,
+      oneLiner:
+        item?.oneLiner ||
+        (firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine),
+      meta: item?.meta || "",
+      story,
+      plot: item?.plot || "-",
+      emotions: Array.isArray(item?.emotions) ? item.emotions : [],
+      ending: item?.ending || "-",
+      keywords: Array.isArray(item?.keywords) ? item.keywords : [],
+      raw: story,
+    };
+  });
+}
+export default function BrandStoryConsultingInterview({ onLogout }) {
   const navigate = useNavigate();
 
-  // ✅ 약관/방침 모달
+  // ✅ Strict Flow 가드(스토리 단계) + 이탈/새로고침 처리
+  useEffect(() => {
+    try {
+      const hadPending = consumeBrandFlowPendingAbort();
+      if (hadPending) {
+        abortBrandFlow("interrupted");
+        window.alert(
+          "브랜드 컨설팅 진행이 중단되어, 네이밍부터 다시 시작합니다.",
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    const guard = ensureStrictStepAccess("story");
+    if (!guard.ok) {
+      const msg =
+        guard?.reason === "no_back"
+          ? "이전 단계로는 돌아갈 수 없습니다. 현재 진행 중인 단계에서 계속 진행해 주세요."
+          : "이전 단계를 먼저 완료해 주세요.";
+      window.alert(msg);
+      navigate(guard.redirectTo || "/brand/naming/interview", {
+        replace: true,
+      });
+      return;
+    }
+
+    try {
+      setBrandFlowCurrent("story");
+    } catch {
+      // ignore
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ✅ 새로고침/탭닫기 경고 + 다음 진입 시 네이밍부터 리셋
+  useEffect(() => {
+    const onBeforeUnload = (e) => {
+      try {
+        markBrandFlowPendingAbort("beforeunload");
+      } catch {
+        // ignore
+      }
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
   const [openType, setOpenType] = useState(null);
   const closeModal = () => setOpenType(null);
 
-  // ✅ 폼
-  const [form, setForm] = useState({
-    brandName: "",
-    productName: "",
-    productCategory: "",
-    targetPlatform: "",
-    targetCustomer: "",
-    tone: "",
-    keywords: "",
-    usage: "",
-    colorPref: "",
-    colorAvoid: "",
-    mustInclude: "",
-    mustAvoid: "",
-    references: "",
-    goal: "",
-    notes: "",
-  });
+  const [form, setForm] = useState(INITIAL_FORM);
 
-  // ✅ 결과/선택
-  const [candidates, setCandidates] = useState([]);
-  const [selectedId, setSelectedId] = useState("");
-
-  // ✅ 저장 상태 UI
   const [saveMsg, setSaveMsg] = useState("");
   const [lastSaved, setLastSaved] = useState("-");
 
-  // 섹션 스크롤 ref
-  const refBasic = useRef(null);
-  const refAudience = useRef(null);
-  const refStyle = useRef(null);
-  const refConstraints = useRef(null);
-  const refGoal = useRef(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [regenSeed, setRegenSeed] = useState(0);
   const refResult = useRef(null);
-
-  const sections = useMemo(
-    () => [
-      { id: "basic", label: "기본 정보", ref: refBasic },
-      { id: "audience", label: "타깃/채널", ref: refAudience },
-      { id: "style", label: "스타일/키워드", ref: refStyle },
-      { id: "constraints", label: "제약/참고", ref: refConstraints },
-      { id: "goal", label: "목표/요청", ref: refGoal },
-      { id: "result", label: "후보 3안", ref: refResult },
-    ],
-    [],
-  );
 
   const requiredKeys = useMemo(
     () => [
-      "productName",
-      "productCategory",
-      "targetPlatform",
-      "tone",
-      "keywords",
-      "usage",
-      "goal",
+      "founding_story",
+      "customer_transformation",
+      "brand_mission",
+      "story_plot",
+      "customer_conflict",
+      "story_emotion",
+      "ultimate_goal",
     ],
     [],
   );
@@ -227,7 +521,7 @@ export default function AICutModelConsultingInterview({ onLogout }) {
   const requiredStatus = useMemo(() => {
     const status = {};
     requiredKeys.forEach((k) => {
-      status[k] = Boolean(String(form?.[k] || "").trim());
+      status[k] = isFilled(form?.[k]);
     });
     return status;
   }, [form, requiredKeys]);
@@ -243,188 +537,409 @@ export default function AICutModelConsultingInterview({ onLogout }) {
   }, [completedRequired, requiredKeys.length]);
 
   const canAnalyze = completedRequired === requiredKeys.length;
+  const hasResult = candidates.length > 0;
+  const canGoNext = Boolean(hasResult && selectedId);
 
-  const currentSectionLabel = useMemo(() => {
-    if (!form.productName.trim() || !form.productCategory.trim())
-      return "기본 정보";
-    if (!form.targetPlatform.trim()) return "타깃/채널";
-    if (!form.tone.trim() || !form.keywords.trim() || !form.usage.trim())
-      return "스타일/키워드";
-    if (!form.goal.trim()) return "목표/요청";
-    return candidates.length ? "후보 3안" : "완료";
-  }, [form, candidates.length]);
-
-  const setValue = (key, value) => {
+  const setValue = (key, value) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  const scrollToResult = () => {
+    if (!refResult?.current) return;
+    refResult.current.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const scrollToSection = (ref) => {
-    if (!ref?.current) return;
-    ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  // ✅ 기업 진단&인터뷰 기본 정보 자동 반영 (중복 질문 제거)
+  // draft 로드
   useEffect(() => {
     try {
-      const raw = userGetItem("diagnosisInterviewDraft_v1");
+      const raw = userGetItem(STORAGE_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      const diag = parsed?.form || parsed;
-      if (!diag || typeof diag !== "object") return;
+      const loaded =
+        parsed?.form && typeof parsed.form === "object" ? parsed.form : null;
+      if (loaded) {
+        setForm((prev) => {
+          const next = { ...prev, ...loaded };
 
-      const name = String(diag.companyName || diag.brandName || "").trim();
+          if (
+            !String(next.founding_story || "").trim() &&
+            String(loaded.originStory || "").trim()
+          ) {
+            next.founding_story = loaded.originStory;
+          }
+          if (
+            !String(next.customer_conflict || "").trim() &&
+            String(loaded.problemStory || "").trim()
+          ) {
+            next.customer_conflict = loaded.problemStory;
+          }
+          if (
+            !String(next.customer_transformation || "").trim() &&
+            String(loaded.solutionStory || "").trim()
+          ) {
+            next.customer_transformation = loaded.solutionStory;
+          }
+          if (
+            !String(next.ultimate_goal || "").trim() &&
+            String(loaded.goal || "").trim()
+          ) {
+            next.ultimate_goal = loaded.goal;
+          }
+          if (
+            !String(next.brand_mission || "").trim() &&
+            String(loaded.brandCore || "").trim()
+          ) {
+            next.brand_mission = loaded.brandCore;
+          }
+
+          return next;
+        });
+      }
+      if (parsed?.updatedAt) {
+        const d = new Date(parsed.updatedAt);
+        if (!Number.isNaN(d.getTime())) setLastSaved(d.toLocaleString());
+      }
+    } catch {}
+  }, []);
+
+  // 기업진단 자동 반영
+  useEffect(() => {
+    try {
+      const diag = readDiagnosisForm();
+      if (!diag) return;
+
+      const next = {
+        companyName: safeText(
+          diag.companyName || diag.brandName || diag.projectName,
+          "",
+        ),
+        industry: safeText(diag.industry || diag.category || diag.field, ""),
+        stage: safeText(diag.stage, ""),
+        website: safeText(diag.website || diag.homepage || diag.siteUrl, ""),
+        oneLine: safeText(
+          diag.oneLine ||
+            diag.companyIntro ||
+            diag.intro ||
+            diag.serviceIntro ||
+            diag.shortIntro,
+          "",
+        ),
+        targetCustomer: safeText(
+          diag.targetCustomer ||
+            diag.target ||
+            diag.customerTarget ||
+            diag.primaryCustomer,
+          "",
+        ),
+      };
 
       setForm((prev) => ({
         ...prev,
-        brandName: prev.brandName || name,
+        companyName: next.companyName || prev.companyName,
+        industry: next.industry || prev.industry,
+        stage: next.stage || prev.stage,
+        website: next.website || prev.website,
+        oneLine: next.oneLine || prev.oneLine,
+        targetCustomer: next.targetCustomer || prev.targetCustomer,
       }));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
-  const handleTempSave = () => {
-    try {
-      const payload = { form, candidates, selectedId, updatedAt: Date.now() };
-      userSetItem(STORAGE_KEY, JSON.stringify(payload));
-      setLastSaved(new Date(payload.updatedAt).toLocaleString());
-      setSaveMsg("임시 저장 완료");
-    } catch {
-      setSaveMsg("저장 실패");
-    }
-  };
 
-  const handleNext = () => {
-    const map = {
-      "기본 정보": refAudience,
-      "타깃/채널": refStyle,
-      "스타일/키워드": refConstraints,
-      "목표/요청": refResult,
-      완료: refResult,
-      "후보 3안": null,
-    };
-    const nextRef = map[currentSectionLabel];
-    if (!nextRef) return;
-    scrollToSection(nextRef);
-  };
-
-  const handleAnalyze = () => {
-    // 🔌 BACKEND 연동 포인트 (홍보물: AI컷 모델 컨설팅)
-    // - 현재: 후보 3안 생성(프론트) → 사용자가 1안 선택 → 결과 페이지
-    // - 백엔드 연동 시:
-    //   A) 인터뷰 저장: POST /promotions/interview
-    //   B) 아이콘 컨설팅 생성: POST /promotions/icon
-    //      → 결과 조회: GET /promotions/icon
-    if (!canAnalyze) {
-      alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
-      return;
-    }
-    const nextCandidates = makeCandidates(form);
-    setCandidates(nextCandidates);
-    setSelectedId("");
-
-    const resultPayload = {
-      service: "aicut",
-      form,
-      candidates: nextCandidates,
-      selectedId: "",
-      updatedAt: Date.now(),
-    };
-    userSetItem(RESULT_KEY, JSON.stringify(resultPayload));
-
-    // (히스토리/마이페이지 표시용)
-    userSetItem(
-      LEGACY_KEY,
-      JSON.stringify({
-        updatedAt: resultPayload.updatedAt,
-        selectedId: "",
-        summary: {
-          title: form.productName || form.brandName,
-          subtitle: "AI컷 모델 컨설팅",
-        },
-      }),
-    );
-
-    scrollToSection(refResult);
-  };
-
-  const handleGoResult = () => {
-    if (!selectedId) {
-      alert("후보 1안을 선택해 주세요.");
-      return;
-    }
-    const selected = candidates.find((c) => c.id === selectedId);
-    const payload = {
-      service: "aicut",
-      form,
-      candidates,
-      selectedId,
-      selected,
-      updatedAt: Date.now(),
-    };
-    userSetItem(RESULT_KEY, JSON.stringify(payload));
-    userSetItem(
-      LEGACY_KEY,
-      JSON.stringify({
-        updatedAt: payload.updatedAt,
-        selectedId,
-        selected,
-        summary: {
-          title: selected?.name || "AI컷 모델 컨설팅",
-          subtitle: form.productName || form.brandName,
-        },
-      }),
-    );
-    try {
-      // ✅ 완료 시점의 결과 스냅샷 저장(카드 히스토리)
-      addPromoReport(
-        createPromoReportSnapshot({
-          serviceKey: "aicut",
-          serviceLabel: "AI컷 모델 컨설팅",
-          interviewRoute: "/promotion/aicut/interview",
-          result: payload,
-        }),
-      );
-    } catch {
-      // ignore
-    }
-    navigate(`/promotion/result?service=aicut`);
-  };
-
-  // ✅ draft/result 로드
+  // 결과 로드
   useEffect(() => {
-    const rawDraft = userGetItem(STORAGE_KEY);
-    const draft = rawDraft ? safeParse(rawDraft) : null;
-    if (draft?.form) setForm((prev) => ({ ...prev, ...draft.form }));
-    if (Array.isArray(draft?.candidates)) setCandidates(draft.candidates);
-    if (typeof draft?.selectedId === "string") setSelectedId(draft.selectedId);
-    if (draft?.updatedAt) {
-      const d = new Date(draft.updatedAt);
-      if (!Number.isNaN(d.getTime())) setLastSaved(d.toLocaleString());
-    }
-
-    const rawResult = userGetItem(RESULT_KEY);
-    const result = rawResult ? safeParse(rawResult) : null;
-    if (result?.form) setForm((prev) => ({ ...prev, ...result.form }));
-    if (Array.isArray(result?.candidates)) setCandidates(result.candidates);
-    if (typeof result?.selectedId === "string")
-      setSelectedId(result.selectedId);
+    try {
+      const raw = userGetItem(RESULT_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.candidates)) setCandidates(parsed.candidates);
+      if (parsed?.selectedId) setSelectedId(parsed.selectedId);
+      if (typeof parsed?.regenSeed === "number") setRegenSeed(parsed.regenSeed);
+    } catch {}
   }, []);
 
-  // ✅ 자동 저장(디바운스)
+  // 자동 저장
   useEffect(() => {
     setSaveMsg("");
     const t = setTimeout(() => {
       try {
-        const payload = { form, candidates, selectedId, updatedAt: Date.now() };
+        const payload = { form, updatedAt: Date.now() };
         userSetItem(STORAGE_KEY, JSON.stringify(payload));
         setLastSaved(new Date(payload.updatedAt).toLocaleString());
         setSaveMsg("자동 저장됨");
-      } catch {
-        // ignore
-      }
-    }, 650);
+      } catch {}
+    }, 600);
+
     return () => clearTimeout(t);
-  }, [form, candidates, selectedId]);
+  }, [form]);
+
+  const persistResult = (nextCandidates, nextSelectedId, nextSeed) => {
+    const updatedAt = Date.now();
+
+    try {
+      userSetItem(
+        RESULT_KEY,
+        JSON.stringify({
+          candidates: nextCandidates,
+          selectedId: nextSelectedId,
+          regenSeed: nextSeed,
+          updatedAt,
+        }),
+      );
+    } catch {}
+
+    // legacy 저장
+    try {
+      const selected =
+        nextCandidates.find((c) => c.id === nextSelectedId) || null;
+      userSetItem(
+        LEGACY_KEY,
+        JSON.stringify({
+          form,
+          candidates: nextCandidates,
+          selectedId: nextSelectedId,
+          selected,
+          regenSeed: nextSeed,
+          updatedAt,
+        }),
+      );
+    } catch {}
+
+    // ✅ pipeline 저장 + 이후 단계 초기화(스토리가 바뀌면 로고는 무효)
+    try {
+      const selected =
+        nextCandidates.find((c) => c.id === nextSelectedId) || null;
+      setStepResult("story", {
+        candidates: nextCandidates,
+        selectedId: nextSelectedId,
+        selected,
+        regenSeed: nextSeed,
+        updatedAt,
+      });
+      clearStepsFrom("logo");
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleGenerateCandidates = async (mode = "generate") => {
+    // 🔌 BACKEND 연동: 스토리 생성
+    // - POST /brands/{brandId}/story
+    if (!canAnalyze) {
+      alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
+      return;
+    }
+
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    if (!brandId) {
+      alert(
+        "brandId를 확인할 수 없습니다. 기업진단/이전 단계를 다시 진행해 주세요.",
+      );
+      return;
+    }
+
+    setAnalyzing(true);
+    try {
+      const nextSeed = mode === "regen" ? regenSeed + 1 : regenSeed;
+      if (mode === "regen") setRegenSeed(nextSeed);
+
+      const payload = {
+        ...form,
+        step: "story",
+        mode,
+        regenSeed: nextSeed,
+      };
+
+      const raw = await apiRequest(`/brands/${brandId}/story`, {
+        method: "POST",
+        data: payload,
+      });
+
+      const nextCandidates = normalizeStoryCandidates(raw, form);
+
+      if (!nextCandidates.length) {
+        alert("스토리 후보를 받지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+
+      setCandidates(nextCandidates);
+      setSelectedId(null);
+      persistResult(nextCandidates, null, nextSeed);
+      scrollToResult();
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message ||
+        e?.userMessage ||
+        e?.message ||
+        "요청 실패";
+
+      console.warn("POST /brands/{brandId}/story failed:", e);
+
+      if (status === 401) {
+        alert("로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요.");
+        return;
+      }
+      if (status === 403) {
+        alert(
+          "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      // ✅ 백이 '스토리 단계가 아닙니다'를 내려주는 경우가 많아 안내 강화
+      if (String(msg).includes("스토리 단계")) {
+        alert(
+          `스토리 생성이 거절되었습니다: ${msg}
+
+컨셉 단계에서 '선택'을 완료한 뒤 다시 시도해 주세요.`,
+        );
+        return;
+      }
+
+      alert(`스토리 생성에 실패했습니다: ${msg}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSelectCandidate = (id) => {
+    setSelectedId(id);
+    persistResult(candidates, id, regenSeed);
+  };
+
+  const handleGoNext = async () => {
+    if (!canGoNext) return;
+
+    // ✅ 선택한 스토리를 백에 저장(스토리 -> 로고 단계로 이동)
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    const selected =
+      candidates.find((c) => c.id === selectedId) ||
+      candidates.find((c) => c.id === (selectedId || "")) ||
+      null;
+
+    const selectedStory = selected?.raw || selected?.story || "";
+
+    if (!brandId) {
+      alert(
+        "brandId를 확인할 수 없습니다. 기업진단/이전 단계를 다시 진행해 주세요.",
+      );
+      return;
+    }
+    if (!String(selectedStory).trim()) {
+      alert("선택된 스토리를 찾을 수 없습니다. 후보를 다시 선택해 주세요.");
+      return;
+    }
+
+    try {
+      await apiRequest(`/brands/${brandId}/story/select`, {
+        method: "POST",
+        data: { selectedByUser: String(selectedStory) },
+      });
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg =
+        e?.response?.data?.message || e?.userMessage || e?.message || "";
+
+      console.warn("POST /brands/{brandId}/story/select failed:", e);
+
+      if (status === 401 || status === 403) {
+        alert(
+          status === 401
+            ? "로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요."
+            : "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      // 이미 단계가 넘어간 경우(예: 재진입)에는 다음으로 진행 허용
+      if (!String(msg).includes("스토리 단계")) {
+        alert(`스토리 선택 저장에 실패했습니다: ${msg || "요청 실패"}`);
+        return;
+      }
+    }
+
+    navigate(NEXT_PATH);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleResetAll = () => {
+    const ok = window.confirm("입력/결과를 모두 초기화할까요?");
+    if (!ok) return;
+
+    try {
+      userRemoveItem(STORAGE_KEY);
+      userRemoveItem(RESULT_KEY);
+      userRemoveItem(LEGACY_KEY);
+    } catch {}
+
+    // ✅ pipeline에서도 현재 단계(스토리)부터 초기화
+    try {
+      clearStepsFrom("story");
+      setBrandFlowCurrent("story");
+    } catch {
+      // ignore
+    }
+
+    const diag = (() => {
+      try {
+        return readDiagnosisForm();
+      } catch {
+        return null;
+      }
+    })();
+
+    const base = { ...INITIAL_FORM };
+    if (diag) {
+      base.companyName = safeText(
+        diag.companyName || diag.brandName || diag.projectName,
+        "",
+      );
+      base.industry = safeText(
+        diag.industry || diag.category || diag.field,
+        "",
+      );
+      base.stage = safeText(diag.stage, "");
+      base.website = safeText(
+        diag.website || diag.homepage || diag.siteUrl,
+        "",
+      );
+      base.oneLine = safeText(
+        diag.oneLine ||
+          diag.companyIntro ||
+          diag.intro ||
+          diag.serviceIntro ||
+          diag.shortIntro,
+        "",
+      );
+      base.targetCustomer = safeText(
+        diag.targetCustomer ||
+          diag.target ||
+          diag.customerTarget ||
+          diag.primaryCustomer,
+        "",
+      );
+    }
+
+    setForm(base);
+    setCandidates([]);
+    setSelectedId(null);
+    setRegenSeed(0);
+    setSaveMsg("");
+    setLastSaved("-");
+  };
 
   return (
     <div className="diagInterview consultingInterview">
@@ -450,10 +965,12 @@ export default function AICutModelConsultingInterview({ onLogout }) {
         <div className="diagInterview__container">
           <div className="diagInterview__titleRow">
             <div>
-              <h1 className="diagInterview__title">AI컷 모델 컨설팅 인터뷰</h1>
+              <h1 className="diagInterview__title">
+                브랜드 스토리 컨설팅 인터뷰
+              </h1>
               <p className="diagInterview__sub">
-                제품에 어울리는 모델 컷 방향(후보 3안)과 생성 프롬프트를
-                정리합니다.
+                기업 진단에서 입력한 기본 정보는 자동 반영되며, 여기서는 브랜드
+                스토리(계기·갈등·전환·미션·플롯·감정·궁극 목표)를 입력합니다.
               </p>
             </div>
 
@@ -461,365 +978,392 @@ export default function AICutModelConsultingInterview({ onLogout }) {
               <button
                 type="button"
                 className="btn ghost"
-                onClick={() => navigate("/promotion")}
+                onClick={() => navigate("/brandconsulting")}
               >
-                홍보물 컨설팅으로
-              </button>
-              <button type="button" className="btn" onClick={handleTempSave}>
-                임시저장
+                브랜드 컨설팅 홈
               </button>
             </div>
           </div>
 
-          <PromotionServicePanel activeKey="aicut" />
+          <ConsultingFlowPanel activeKey="story" />
 
           <div className="diagInterview__grid">
-            {/* ✅ 왼쪽: 폼 */}
             <section className="diagInterview__left">
               {/* 1) BASIC */}
-              <div className="card" ref={refBasic}>
+              <div className="card">
                 <div className="card__head">
-                  <h2>기본 정보</h2>
-                  <p>아이콘의 ‘맥락’을 결정하는 핵심 정보입니다.</p>
+                  <h2>1. 기본 정보 (자동 반영)</h2>
+                  <p>
+                    기업 진단&인터뷰에서 입력한 정보를 자동으로 불러옵니다. (이
+                    페이지에서 수정하지 않아요)
+                  </p>
                 </div>
 
                 <div className="formGrid">
                   <div className="field">
-                    <label>브랜드명 (자동 반영)</label>
+                    <label>회사/프로젝트명</label>
                     <input
-                      value={form.brandName}
+                      value={form.companyName}
                       disabled
                       placeholder="기업 진단에서 자동 반영"
                     />
                   </div>
 
                   <div className="field">
-                    <label>
-                      제품명 <span className="req">*</span>
-                    </label>
+                    <label>산업/분야</label>
                     <input
-                      value={form.productName}
-                      onChange={(e) => setValue("productName", e.target.value)}
-                      placeholder="예) AI 브랜딩 리포트"
+                      value={form.industry}
+                      disabled
+                      placeholder="기업 진단에서 자동 반영"
                     />
                   </div>
 
                   <div className="field">
-                    <label>
-                      제품 카테고리 <span className="req">*</span>
-                    </label>
+                    <label>성장 단계</label>
                     <input
-                      value={form.productCategory}
-                      onChange={(e) =>
-                        setValue("productCategory", e.target.value)
-                      }
-                      placeholder="예) SaaS / 앱 / 커머스 / 교육"
+                      value={stageLabel(form.stage)}
+                      disabled
+                      placeholder="기업 진단에서 자동 반영"
                     />
                   </div>
 
                   <div className="field">
-                    <label>참고 링크(선택)</label>
+                    <label>웹사이트/소개 링크</label>
                     <input
-                      value={form.references}
-                      onChange={(e) => setValue("references", e.target.value)}
-                      placeholder="예) https://... (레퍼런스/경쟁사/브랜드 가이드)"
+                      value={form.website}
+                      disabled
+                      placeholder="기업 진단에서 자동 반영"
                     />
                   </div>
+                </div>
+
+                {String(form.targetCustomer || "").trim() ? (
+                  <div className="field">
+                    <label>타깃(진단 기준)</label>
+                    <input value={form.targetCustomer} disabled />
+                  </div>
+                ) : null}
+
+                <div className="field">
+                  <label>회사/서비스 소개</label>
+                  <textarea
+                    value={form.oneLine}
+                    disabled
+                    placeholder="기업 진단에서 자동 반영"
+                    rows={3}
+                  />
                 </div>
               </div>
 
-              {/* 2) AUDIENCE */}
-              <div className="card" ref={refAudience}>
+              {/* 2) MATERIAL */}
+              <div className="card">
                 <div className="card__head">
-                  <h2>타깃/채널</h2>
-                  <p>어디에 쓰는 아이콘인지가 스타일/가독성을 좌우합니다.</p>
-                </div>
-
-                <div className="formGrid">
-                  <div className="field">
-                    <label>
-                      사용 채널/플랫폼 <span className="req">*</span>
-                    </label>
-                    <input
-                      value={form.targetPlatform}
-                      onChange={(e) =>
-                        setValue("targetPlatform", e.target.value)
-                      }
-                      placeholder="예) 앱 아이콘 / 웹 파비콘 / 상품 썸네일 / SNS"
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label>타깃 고객(선택)</label>
-                    <input
-                      value={form.targetCustomer}
-                      onChange={(e) =>
-                        setValue("targetCustomer", e.target.value)
-                      }
-                      placeholder="예) 1인 창업자 / 소상공인 / B2B 담당자"
-                    />
-                  </div>
+                  <h2>2. 스토리 재료</h2>
+                  <p>
+                    스토리의 사실/재료를 먼저 채우면, 플롯에 맞게 문장이
+                    깔끔해져요.
+                  </p>
                 </div>
 
                 <div className="field">
                   <label>
-                    주요 사용처/사이즈 <span className="req">*</span>
+                    창업 계기/사건 <span className="req">*</span>
                   </label>
-                  <input
-                    value={form.usage}
-                    onChange={(e) => setValue("usage", e.target.value)}
-                    placeholder="예) 24px 툴바 아이콘 / 512px 앱 아이콘 / 1080x1080 썸네일"
+                  <textarea
+                    value={form.founding_story}
+                    onChange={(e) => setValue("founding_story", e.target.value)}
+                    placeholder="어떤 사건/불편/계기로 시작했나요?"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    고객이 겪는 가장 큰 결핍/방해물{" "}
+                    <span className="req">*</span>
+                  </label>
+                  <textarea
+                    value={form.customer_conflict}
+                    onChange={(e) =>
+                      setValue("customer_conflict", e.target.value)
+                    }
+                    placeholder="고객이 지금 막히는 지점은 무엇인가요?"
+                    rows={5}
+                  />
+                </div>
+
+                <div className="field">
+                  <label>
+                    사용 전/후 고객의 변화 <span className="req">*</span>
+                  </label>
+                  <textarea
+                    value={form.customer_transformation}
+                    onChange={(e) =>
+                      setValue("customer_transformation", e.target.value)
+                    }
+                    placeholder="사용 전에는 어떤 상태였고, 사용 후에는 무엇이 달라지나요?"
+                    rows={5}
                   />
                 </div>
               </div>
 
               {/* 3) STYLE */}
-              <div className="card" ref={refStyle}>
+              <div className="card">
                 <div className="card__head">
-                  <h2>스타일/키워드</h2>
-                  <p>원하는 무드와 핵심 키워드를 구체화합니다.</p>
+                  <h2>3. 원하는 플롯/감정</h2>
+                  <p>선택한 유형을 우선 반영해 후보를 만들어요.</p>
                 </div>
 
                 <div className="field">
                   <label>
-                    톤/분위기 <span className="req">*</span>
+                    원하는 스토리텔링 스타일 <span className="req">*</span>
                   </label>
-                  <input
-                    value={form.tone}
-                    onChange={(e) => setValue("tone", e.target.value)}
-                    placeholder="예) 미니멀, 테크, 따뜻함, 프리미엄"
-                  />
-                </div>
-
-                <div className="field">
-                  <label>
-                    핵심 키워드(3~10개) <span className="req">*</span>
-                  </label>
-                  <textarea
-                    value={form.keywords}
-                    onChange={(e) => setValue("keywords", e.target.value)}
-                    placeholder="예) 신뢰, 속도, 실행, 성장, 간결, 전문"
-                    rows={4}
-                  />
-                </div>
-
-                <div className="formGrid">
-                  <div className="field">
-                    <label>선호 색상(선택)</label>
-                    <input
-                      value={form.colorPref}
-                      onChange={(e) => setValue("colorPref", e.target.value)}
-                      placeholder="예) 네이비/블루, 모노톤"
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    여러 개 선택 가능
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.story_plot}
+                      options={STORY_PLOT_OPTIONS}
+                      onChange={(next) => setValue("story_plot", next)}
                     />
                   </div>
-                  <div className="field">
-                    <label>피하고 싶은 색상(선택)</label>
-                    <input
-                      value={form.colorAvoid}
-                      onChange={(e) => setValue("colorAvoid", e.target.value)}
-                      placeholder="예) 형광색, 과한 빨강"
+                </div>
+
+                <div className="field">
+                  <label>
+                    스토리로 자극하고 싶은 감정 <span className="req">*</span>
+                  </label>
+                  <div className="hint" style={{ marginTop: 6 }}>
+                    여러 개 선택 가능
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <MultiChips
+                      value={form.story_emotion}
+                      options={STORY_EMOTION_OPTIONS}
+                      onChange={(next) => setValue("story_emotion", next)}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* 4) CONSTRAINTS */}
-              <div className="card" ref={refConstraints}>
+              {/* 4) VISION */}
+              <div className="card">
                 <div className="card__head">
-                  <h2>제약/참고</h2>
-                  <p>반드시 포함/제외할 요소가 있으면 적어주세요.</p>
-                </div>
-
-                <div className="formGrid">
-                  <div className="field">
-                    <label>반드시 포함할 요소(선택)</label>
-                    <input
-                      value={form.mustInclude}
-                      onChange={(e) => setValue("mustInclude", e.target.value)}
-                      placeholder="예) 이니셜 BP / 특정 심볼"
-                    />
-                  </div>
-                  <div className="field">
-                    <label>반드시 피할 요소(선택)</label>
-                    <input
-                      value={form.mustAvoid}
-                      onChange={(e) => setValue("mustAvoid", e.target.value)}
-                      placeholder="예) 과한 디테일 / 특정 도형"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 5) GOAL */}
-              <div className="card" ref={refGoal}>
-                <div className="card__head">
-                  <h2>목표/요청</h2>
-                  <p>원하는 결과물의 기준을 명확히 합니다.</p>
+                  <h2>4. 미션/궁극적 목표</h2>
                 </div>
 
                 <div className="field">
                   <label>
-                    목표 <span className="req">*</span>
+                    수익 외에 세상에 기여하려는 바(미션){" "}
+                    <span className="req">*</span>
                   </label>
                   <textarea
-                    value={form.goal}
-                    onChange={(e) => setValue("goal", e.target.value)}
-                    placeholder="예) 작은 사이즈에서도 또렷하고, 브랜드 톤이 느껴지는 아이콘"
-                    rows={4}
+                    value={form.brand_mission}
+                    onChange={(e) => setValue("brand_mission", e.target.value)}
+                    placeholder="예) 누구나 더 쉽게, 더 확신 있게 결정할 수 있도록 돕는다"
+                    rows={5}
                   />
                 </div>
 
                 <div className="field">
-                  <label>추가 메모(선택)</label>
+                  <label>
+                    궁극적으로 만들고 싶은 세상의 모습{" "}
+                    <span className="req">*</span>
+                  </label>
+                  <textarea
+                    value={form.ultimate_goal}
+                    onChange={(e) => setValue("ultimate_goal", e.target.value)}
+                    placeholder="예) 좋은 선택이 정보 격차에 의해 좌우되지 않는 세상"
+                    rows={5}
+                  />
+                </div>
+              </div>
+
+              {/* 5) NOTES */}
+              <div className="card">
+                <div className="card__head">
+                  <h2>5. 추가 요청 (선택)</h2>
+                </div>
+
+                <div className="field">
+                  <label>추가 메모</label>
                   <textarea
                     value={form.notes}
                     onChange={(e) => setValue("notes", e.target.value)}
-                    placeholder="예) 단색 버전도 필수 / 라운드보다 각진 형태 선호"
+                    placeholder="예) 랜딩페이지용으로 6~8문장 버전 + 2문장 요약도 같이"
                     rows={4}
                   />
                 </div>
               </div>
 
-              {/* 6) RESULT */}
-              <div className="card" ref={refResult}>
-                <div className="card__head">
-                  <h2>후보 3안</h2>
-                  <p>
-                    “AI 분석 요청”을 누르면 후보 3안이 생성됩니다. 마음에 드는
-                    1안을 선택해 결과를 확인하세요.
-                  </p>
-                </div>
+              <div ref={refResult} />
 
-                {candidates.length === 0 ? (
-                  <div className="emptyHint">
-                    <p style={{ margin: 0, color: "#6b7280" }}>
-                      아직 후보가 없습니다. 필수 항목을 채운 뒤 “AI 분석 요청”을
-                      눌러 주세요.
-                    </p>
+              {analyzing ? (
+                <div className="card" style={{ marginTop: 14 }}>
+                  <div className="card__head">
+                    <h2>스토리 후보 생성 중</h2>
+                    <p>입력 내용을 바탕으로 후보 3안을 만들고 있어요.</p>
                   </div>
-                ) : (
-                  <div className="resultList">
+                  <div className="hint">잠시만 기다려주세요…</div>
+                </div>
+              ) : hasResult ? (
+                <div className="card" style={{ marginTop: 14 }}>
+                  <div className="card__head">
+                    <h2>스토리 후보 3안</h2>
+                    <p>후보 1개를 선택하면 다음 단계로 진행할 수 있어요.</p>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                    }}
+                  >
                     {candidates.map((c) => {
-                      const picked = selectedId === c.id;
+                      const isSelected = selectedId === c.id;
                       return (
                         <div
                           key={c.id}
-                          className={`resultCard ${picked ? "selected" : ""}`}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setSelectedId(c.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ")
-                              setSelectedId(c.id);
+                          style={{
+                            borderRadius: 16,
+                            padding: 14,
+                            border: isSelected
+                              ? "1px solid rgba(99,102,241,0.45)"
+                              : "1px solid rgba(0,0,0,0.08)",
+                            boxShadow: isSelected
+                              ? "0 12px 30px rgba(99,102,241,0.10)"
+                              : "none",
+                            background: "rgba(255,255,255,0.6)",
                           }}
-                          style={{ marginBottom: 14 }}
                         >
-                          <div className="resultCard__head">
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 10,
+                            }}
+                          >
                             <div>
-                              <p className="resultBadge">
-                                후보 {c.id.toUpperCase()}
-                              </p>
-                              <h3 className="resultTitle">{c.name}</h3>
+                              <div style={{ fontWeight: 900, fontSize: 15 }}>
+                                {c.name}
+                              </div>
+                              <div style={{ marginTop: 6, opacity: 0.9 }}>
+                                {c.oneLiner}
+                              </div>
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  opacity: 0.8,
+                                  fontSize: 12,
+                                }}
+                              >
+                                {c.meta}
+                              </div>
                             </div>
-                            <div className="resultPick">
-                              <span
-                                className={`pickDot ${picked ? "on" : ""}`}
-                              />
-                              <span className="pickText">
-                                {picked ? "선택됨" : "선택"}
-                              </span>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 800,
+                                padding: "4px 10px",
+                                borderRadius: 999,
+                                background: isSelected
+                                  ? "rgba(99,102,241,0.12)"
+                                  : "rgba(0,0,0,0.04)",
+                                border: isSelected
+                                  ? "1px solid rgba(99,102,241,0.25)"
+                                  : "1px solid rgba(0,0,0,0.06)",
+                                color: "rgba(0,0,0,0.75)",
+                                height: "fit-content",
+                              }}
+                            >
+                              {isSelected ? "선택됨" : "후보"}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: 10,
+                              fontSize: 13,
+                              opacity: 0.92,
+                              whiteSpace: "pre-wrap",
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            {c.story}
+
+                            <div style={{ marginTop: 10, opacity: 0.9 }}>
+                              <b>플롯</b> · {c.plot}
+                            </div>
+                            <div style={{ marginTop: 6, opacity: 0.9 }}>
+                              <b>감정</b> · {(c.emotions || []).join(" · ")}
+                            </div>
+                            <div style={{ marginTop: 6, opacity: 0.9 }}>
+                              <b>마무리</b> · {c.ending}
+                            </div>
+
+                            <div style={{ marginTop: 10 }}>
+                              <b>키워드</b>
+                              <div
+                                style={{
+                                  marginTop: 6,
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: 6,
+                                }}
+                              >
+                                {(c.keywords || []).map((kw) => (
+                                  <span
+                                    key={kw}
+                                    style={{
+                                      fontSize: 12,
+                                      fontWeight: 800,
+                                      padding: "4px 10px",
+                                      borderRadius: 999,
+                                      background: "rgba(0,0,0,0.04)",
+                                      border: "1px solid rgba(0,0,0,0.06)",
+                                      color: "rgba(0,0,0,0.75)",
+                                    }}
+                                  >
+                                    #{kw}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           </div>
 
-                          <ul className="resultBullets">
-                            {c.summary.map((t) => (
-                              <li key={t}>{t}</li>
-                            ))}
-                          </ul>
-
-                          <div className="resultGrid">
-                            <div className="resultBlock">
-                              <h4>추천 프롬프트</h4>
-                              <textarea
-                                readOnly
-                                value={c.prompt}
-                                rows={4}
-                                style={{ width: "100%" }}
-                              />
-                            </div>
-                            <div className="resultBlock">
-                              <h4>가이드</h4>
-                              <div className="resultMiniGrid">
-                                <div>
-                                  <p className="miniTitle">Do</p>
-                                  <ul>
-                                    {c.do.map((d) => (
-                                      <li key={d}>{d}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                                <div>
-                                  <p className="miniTitle">Don&apos;t</p>
-                                  <ul>
-                                    {c.dont.map((d) => (
-                                      <li key={d}>{d}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              </div>
-                            </div>
+                          <div
+                            style={{ marginTop: 12, display: "flex", gap: 8 }}
+                          >
+                            <button
+                              type="button"
+                              className={`btn primary ${isSelected ? "disabled" : ""}`}
+                              disabled={isSelected}
+                              onClick={() => handleSelectCandidate(c.id)}
+                            >
+                              {isSelected ? "선택 완료" : "이 방향 선택"}
+                            </button>
                           </div>
                         </div>
                       );
                     })}
-
-                    <div className="bottomBar" style={{ marginTop: 10 }}>
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        onClick={handleAnalyze}
-                      >
-                        후보 다시 생성
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn primary ${selectedId ? "" : "disabled"}`}
-                        onClick={handleGoResult}
-                        disabled={!selectedId}
-                      >
-                        선택한 안으로 결과 보기
-                      </button>
-                    </div>
                   </div>
-                )}
-              </div>
 
-              {/* 하단 버튼 */}
-              <div className="bottomBar">
-                <button
-                  type="button"
-                  className="btn ghost"
-                  onClick={handleNext}
-                >
-                  다음 섹션
-                </button>
-                <button type="button" className="btn" onClick={handleTempSave}>
-                  임시저장
-                </button>
-                <button
-                  type="button"
-                  className={`btn primary ${canAnalyze ? "" : "disabled"}`}
-                  onClick={handleAnalyze}
-                  disabled={!canAnalyze}
-                >
-                  AI 분석 요청
-                </button>
-              </div>
+                  <div style={{ marginTop: 12, fontSize: 12, opacity: 0.75 }}>
+                    {canGoNext
+                      ? "✅ 사이드 카드에서 ‘로고 단계로 이동’ 버튼을 눌러주세요."
+                      : "* 후보 1개를 선택하면 사이드 카드에 다음 단계 버튼이 표시됩니다."}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
-            {/* ✅ 오른쪽: 진행률/가이드 */}
+            {/* 오른쪽 사이드 카드 */}
             <aside className="diagInterview__right">
               <div className="sideCard">
+                <ConsultingFlowMini activeKey="story" />
+
                 <div className="sideCard__titleRow">
                   <h3>진행 상태</h3>
                   <span className="badge">{progress}%</span>
@@ -840,10 +1384,6 @@ export default function AICutModelConsultingInterview({ onLogout }) {
 
                 <div className="sideMeta">
                   <div className="sideMeta__row">
-                    <span className="k">현재 단계</span>
-                    <span className="v">{currentSectionLabel}</span>
-                  </div>
-                  <div className="sideMeta__row">
                     <span className="k">필수 완료</span>
                     <span className="v">
                       {completedRequired}/{requiredKeys.length}
@@ -853,63 +1393,66 @@ export default function AICutModelConsultingInterview({ onLogout }) {
                     <span className="k">마지막 저장</span>
                     <span className="v">{lastSaved}</span>
                   </div>
+                  <div className="sideMeta__row">
+                    <span className="k">단계</span>
+                    <span className="v">{stageLabel(form.stage)}</span>
+                  </div>
                 </div>
 
                 {saveMsg ? <p className="saveMsg">{saveMsg}</p> : null}
 
                 <div className="divider" />
 
-                <h4 className="sideSubTitle">필수 입력 체크</h4>
-                <ul className="checkList">
-                  <li className={requiredStatus.productName ? "ok" : ""}>
-                    제품명
-                  </li>
-                  <li className={requiredStatus.productCategory ? "ok" : ""}>
-                    제품 카테고리
-                  </li>
-                  <li className={requiredStatus.targetPlatform ? "ok" : ""}>
-                    사용 채널/플랫폼
-                  </li>
-                  <li className={requiredStatus.tone ? "ok" : ""}>톤/분위기</li>
-                  <li className={requiredStatus.keywords ? "ok" : ""}>
-                    핵심 키워드
-                  </li>
-                  <li className={requiredStatus.usage ? "ok" : ""}>
-                    사용처/사이즈
-                  </li>
-                  <li className={requiredStatus.goal ? "ok" : ""}>목표</li>
-                </ul>
-
-                <div className="divider" />
-
-                <h4 className="sideSubTitle">빠른 이동</h4>
-                <div className="jumpGrid">
-                  {sections.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className="jumpBtn"
-                      onClick={() => scrollToSection(s.ref)}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
+                <h4 className="sideSubTitle">빠른 작업</h4>
 
                 <button
                   type="button"
-                  className={`btn primary sideAnalyze ${canAnalyze ? "" : "disabled"}`}
-                  onClick={handleAnalyze}
-                  disabled={!canAnalyze}
+                  className={`btn primary ${canAnalyze && !analyzing ? "" : "disabled"}`}
+                  onClick={() =>
+                    handleGenerateCandidates(hasResult ? "regen" : "generate")
+                  }
+                  disabled={!canAnalyze || analyzing}
+                  style={{ width: "100%", marginBottom: 8 }}
                 >
-                  AI 분석 요청
+                  {analyzing
+                    ? "생성 중..."
+                    : hasResult
+                      ? "AI 분석 재요청"
+                      : "AI 분석 요청"}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={handleResetAll}
+                  style={{ width: "100%" }}
+                >
+                  전체 초기화
                 </button>
 
                 {!canAnalyze ? (
-                  <p className="hint">
-                    * 필수 항목을 모두 입력하면 분석 버튼이 활성화됩니다.
+                  <p className="hint" style={{ marginTop: 10 }}>
+                    * 필수 항목을 채우면 분석 버튼이 활성화됩니다.
                   </p>
                 ) : null}
+
+                <div className="divider" />
+
+                <h4 className="sideSubTitle">다음 단계</h4>
+                {canGoNext ? (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={handleGoNext}
+                    style={{ width: "100%" }}
+                  >
+                    로고 단계로 이동
+                  </button>
+                ) : (
+                  <p className="hint" style={{ marginTop: 10 }}>
+                    * 후보 1개를 선택하면 다음 단계 버튼이 표시됩니다.
+                  </p>
+                )}
               </div>
             </aside>
           </div>

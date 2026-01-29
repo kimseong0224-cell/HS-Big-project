@@ -20,6 +20,8 @@ import {
 
 import {
   ensureStrictStepAccess,
+  readPipeline,
+  getSelected,
   setBrandFlowCurrent,
   markBrandFlowPendingAbort,
   consumeBrandFlowPendingAbort,
@@ -33,6 +35,9 @@ import {
   addBrandReport,
   createBrandReportSnapshot,
 } from "../utils/reportHistory.js";
+
+// ✅ 백엔드 요청(axios)
+import { apiRequest } from "../api/client.js";
 
 const STORAGE_KEY = "logoConsultingInterviewDraft_v1";
 const RESULT_KEY = "logoConsultingInterviewResult_v1";
@@ -134,6 +139,71 @@ const LOGO_STRUCTURE_OPTIONS = ["심볼형", "워드마크형", "콤비네이션
 const BRAND_COLOR_OPTIONS = ["블루/네이비", "블랙/화이트"];
 const DESIGN_STYLE_OPTIONS = ["플랫/미니멀", "3D/그라디언트"];
 const VISUAL_TEXT_RATIO_OPTIONS = ["이미지 중심", "텍스트 중심", "균형"];
+
+/** ======================
+ *  ✅ 백 응답 후보 normalize (로고 3안 형태로 통일)
+ *  - 예상 응답 예:
+ *    1) { logo1: "url", logo2: "url", logo3: "url" }
+ *    2) { candidates: [ { id, url }, ... ] }
+ *    3) ["url1","url2","url3"]
+ *  ====================== */
+function normalizeLogoCandidates(raw) {
+  const payload = raw?.data ?? raw?.result ?? raw;
+
+  const readUrl = (v) => {
+    if (typeof v === "string") return v.trim();
+    if (v && typeof v === "object") {
+      const cand =
+        v.url ||
+        v.imageUrl ||
+        v.logoUrl ||
+        v.logoImageUrl ||
+        v.href ||
+        v.src ||
+        "";
+      return typeof cand === "string" ? cand.trim() : "";
+    }
+    return "";
+  };
+
+  // 1) 배열로 직접 온 경우
+  let list = Array.isArray(payload) ? payload : null;
+
+  // 2) candidates 키로 온 경우
+  if (!list && payload && typeof payload === "object") {
+    list = payload?.candidates || payload?.logos || payload?.data?.candidates;
+  }
+
+  // 3) object에 logo1/2/3 형태로 담긴 경우
+  if (!list && payload && typeof payload === "object") {
+    const keys = ["logo1", "logo2", "logo3"];
+    const picked = [];
+    for (const k of keys) {
+      const u = readUrl(payload?.[k]);
+      if (u) picked.push(u);
+    }
+    list = picked;
+  }
+
+  if (!Array.isArray(list)) return [];
+
+  // 최종 후보(최대 3개) 통일
+  const urls = list
+    .map((x) => readUrl(x))
+    .filter((x) => typeof x === "string" && x.length > 0)
+    .slice(0, 3);
+
+  return urls.map((url, idx) => {
+    const n = idx + 1;
+    return {
+      id: `logo${n}`,
+      name: `로고 ${n}`,
+      imageUrl: url,
+      url,
+      summary: "AI가 생성한 로고 시안입니다.",
+    };
+  });
+}
 
 function generateLogoCandidates(form, seed = 0) {
   const companyName = safeText(form?.companyName, "브랜드");
@@ -606,12 +676,24 @@ export default function LogoConsultingInterview({ onLogout }) {
   };
 
   const handleGenerateCandidates = async (mode = "generate") => {
-    // 🔌 BACKEND 연동 포인트 (로고 컨설팅 - AI 분석 요청 버튼)
-    // - 백엔드 연동 시(명세서 기준):
-    //   A) 인터뷰 저장(공통): POST /brands/interview
-    //   B) 로고 가이드:     POST /brands/logo (또는 유사)
     if (!canAnalyze) {
       alert("필수 항목을 모두 입력하면 요청이 가능합니다.");
+      return;
+    }
+
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    if (!brandId) {
+      alert(
+        "brandId를 확인할 수 없습니다. 기업진단 → 네이밍/컨셉/스토리 완료 후 로고 단계로 진행해 주세요.",
+      );
+      navigate("/diagnosisinterview");
       return;
     }
 
@@ -620,13 +702,66 @@ export default function LogoConsultingInterview({ onLogout }) {
       const nextSeed = mode === "regen" ? regenSeed + 1 : regenSeed;
       if (mode === "regen") setRegenSeed(nextSeed);
 
-      await new Promise((r) => setTimeout(r, 450));
-      const nextCandidates = generateLogoCandidates(form, nextSeed);
+      const diagnosisSummary = p?.diagnosisSummary || null;
+      const selections = {
+        naming: getSelected("naming", p) || null,
+        concept: getSelected("concept", p) || null,
+        story: getSelected("story", p) || null,
+      };
+
+      const payload = {
+        ...form,
+        mode,
+        regenSeed: nextSeed,
+        questionnaire: {
+          step: "logo",
+          version: "logo_v1",
+          locale: "ko-KR",
+        },
+        context: {
+          diagnosisSummary,
+          selections,
+        },
+      };
+
+      // ✅ 로고 생성
+      const res = await apiRequest(`/brands/${brandId}/logo`, {
+        method: "POST",
+        data: payload,
+      });
+
+      const nextCandidates = normalizeLogoCandidates(res);
+
+      if (!nextCandidates.length) {
+        alert(
+          "로고 후보를 받지 못했습니다. 백 응답 포맷(logo1~3 또는 candidates 배열)을 확인해주세요.",
+        );
+        setCandidates([]);
+        setSelectedId(null);
+        persistResult([], null, nextSeed);
+        return;
+      }
 
       setCandidates(nextCandidates);
       setSelectedId(null);
       persistResult(nextCandidates, null, nextSeed);
       scrollToResult();
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message || e?.userMessage || e?.message;
+
+      console.warn("POST /brands/{brandId}/logo failed:", e);
+
+      if (status === 401 || status === 403) {
+        alert(
+          status === 401
+            ? "로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요."
+            : "권한이 없습니다(403). 현재 로그인한 계정의 brandId가 아닐 수 있어요. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      alert(`로고 생성 요청에 실패했습니다: ${msg || "요청 실패"}`);
     } finally {
       setAnalyzing(false);
     }
@@ -637,7 +772,68 @@ export default function LogoConsultingInterview({ onLogout }) {
     persistResult(candidates, id, regenSeed);
   };
 
-  const handleFinish = () => {
+  const [finishing, setFinishing] = useState(false);
+
+  const handleFinish = async () => {
+    if (!canFinish || finishing) return;
+
+    const p = readPipeline();
+    const brandId =
+      p?.brandId ||
+      p?.brand?.id ||
+      p?.diagnosisResult?.brandId ||
+      p?.diagnosis?.brandId ||
+      null;
+
+    const selected =
+      candidates.find((c) => c.id === selectedId) ||
+      candidates.find((c) => c.id === (selectedId || "")) ||
+      null;
+
+    const selectedLogoUrl =
+      selected?.imageUrl || selected?.url || selected?.logoUrl || "";
+
+    if (!brandId) {
+      alert("brandId를 확인할 수 없습니다. 기업진단을 다시 진행해 주세요.");
+      return;
+    }
+    if (!String(selectedLogoUrl).trim()) {
+      alert("선택된 로고 URL을 찾을 수 없습니다. 후보를 다시 선택해 주세요.");
+      return;
+    }
+
+    setFinishing(true);
+    try {
+      // ✅ 백엔드에 선택값 저장(로고 선택 → 브랜드 컨설팅 종료)
+      await apiRequest(`/brands/${brandId}/logo/select`, {
+        method: "POST",
+        data: { selectedByUser: String(selectedLogoUrl) },
+      });
+    } catch (e) {
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.message || e?.userMessage || e?.message;
+
+      console.warn("POST /brands/{brandId}/logo/select failed:", e);
+
+      if (status === 401 || status === 403) {
+        alert(
+          status === 401
+            ? "로그인이 필요합니다. 다시 로그인한 뒤 시도해주세요."
+            : "권한이 없습니다(403). 보통 현재 로그인한 계정의 brandId가 아닌 값으로 요청할 때 발생합니다. 기업진단을 다시 진행해 brandId를 새로 생성한 뒤 시도해주세요.",
+        );
+        return;
+      }
+
+      // ✅ 재진입/중복 저장 등으로 단계가 이미 넘어갔을 수 있으므로,
+      // 메시지에 '로고'가 포함되지 않으면 치명 에러로 보고 중단.
+      if (!String(msg || "").includes("로고")) {
+        alert(`로고 선택 저장에 실패했습니다: ${msg || "요청 실패"}`);
+        return;
+      }
+    } finally {
+      setFinishing(false);
+    }
+
     try {
       // ✅ 완료 시점의 결과 스냅샷을 히스토리에 저장(카드가 쌓이는 구조)
       addBrandReport(createBrandReportSnapshot());
@@ -992,11 +1188,8 @@ export default function LogoConsultingInterview({ onLogout }) {
               ) : hasResult ? (
                 <div className="card" style={{ marginTop: 14 }}>
                   <div className="card__head">
-                    <h2>로고 방향 후보 3안</h2>
-                    <p>
-                      후보 1개를 선택하면 결과 히스토리로 이동할 수 있어요.
-                      (현재는 더미 생성)
-                    </p>
+                    <h2>로고 후보 3안</h2>
+                    <p>후보 1개를 선택하면 결과 히스토리로 이동할 수 있어요.</p>
                   </div>
 
                   <div
@@ -1058,57 +1251,57 @@ export default function LogoConsultingInterview({ onLogout }) {
                             </span>
                           </div>
 
-                          <div
-                            style={{
-                              marginTop: 10,
-                              fontSize: 13,
-                              opacity: 0.92,
-                              lineHeight: 1.55,
-                            }}
-                          >
-                            <div>
-                              <b>형태</b> · {c.structure}
+                          {/* ✅ 로고 이미지 미리보기 */}
+                          <div style={{ marginTop: 12 }}>
+                            <div
+                              style={{
+                                width: "100%",
+                                borderRadius: 14,
+                                border: "1px solid rgba(0,0,0,0.08)",
+                                background: "rgba(255,255,255,0.75)",
+                                overflow: "hidden",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  width: "100%",
+                                  height: 220,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  padding: 12,
+                                }}
+                              >
+                                {c?.imageUrl ? (
+                                  <img
+                                    src={c.imageUrl}
+                                    alt={c.name}
+                                    style={{
+                                      maxWidth: "100%",
+                                      maxHeight: "100%",
+                                      objectFit: "contain",
+                                      borderRadius: 10,
+                                    }}
+                                  />
+                                ) : (
+                                  <div style={{ fontSize: 13, opacity: 0.7 }}>
+                                    이미지를 표시할 수 없습니다.
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div style={{ marginTop: 6 }}>
-                              <b>모티프</b> · {c.motif}
-                            </div>
-                            <div style={{ marginTop: 6 }}>
-                              <b>색상 팔레트</b> ·{" "}
-                              {Array.isArray(c.palette)
-                                ? c.palette.join(" / ")
-                                : String(c.palette)}
-                            </div>
-                            <div style={{ marginTop: 6 }}>
-                              <b>스타일</b> · {c.style}
-                            </div>
-                            <div style={{ marginTop: 6 }}>
-                              <b>비중</b> · {c.ratio}
-                            </div>
-                            <div style={{ marginTop: 6 }}>
-                              <b>사용처</b> · {c.usage}
-                            </div>
-
-                            <div style={{ marginTop: 10 }}>
-                              <b>가이드</b>
-                              <ul style={{ margin: "6px 0 0 18px" }}>
-                                {(c.guidance || []).map((x) => (
-                                  <li key={x}>{x}</li>
-                                ))}
-                              </ul>
-                            </div>
-
-                            <div style={{ marginTop: 10 }}>
-                              <b>사용성 체크</b>
-                              <ul style={{ margin: "6px 0 0 18px" }}>
-                                {(c.doDont || []).map((x) => (
-                                  <li key={x}>{x}</li>
-                                ))}
-                              </ul>
-                            </div>
-
-                            <div style={{ marginTop: 10, opacity: 0.9 }}>
-                              <b>근거</b> · {c.rationale}
-                            </div>
+                            {c?.imageUrl ? (
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  fontSize: 12,
+                                  opacity: 0.75,
+                                  wordBreak: "break-all",
+                                }}
+                              >
+                                <b>URL</b> · {c.imageUrl}
+                              </div>
+                            ) : null}
                           </div>
 
                           <div
@@ -1120,7 +1313,7 @@ export default function LogoConsultingInterview({ onLogout }) {
                               disabled={isSelected}
                               onClick={() => handleSelectCandidate(c.id)}
                             >
-                              {isSelected ? "선택 완료" : "이 방향 선택"}
+                              {isSelected ? "선택 완료" : "이 로고 선택"}
                             </button>
                           </div>
                         </div>
@@ -1220,11 +1413,12 @@ export default function LogoConsultingInterview({ onLogout }) {
                 {canFinish ? (
                   <button
                     type="button"
-                    className="btn primary"
+                    className={`btn primary ${finishing ? "disabled" : ""}`}
                     onClick={handleFinish}
+                    disabled={finishing}
                     style={{ width: "100%" }}
                   >
-                    완료(히스토리로)
+                    {finishing ? "저장 중..." : "완료(히스토리로)"}
                   </button>
                 ) : (
                   <p className="hint" style={{ marginTop: 10 }}>
