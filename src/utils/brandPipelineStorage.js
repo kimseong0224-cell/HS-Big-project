@@ -4,6 +4,7 @@ import {
   userSetItem,
   userRemoveItem,
   userSafeParse,
+  removeLegacyKey,
 } from "./userLocalStorage.js";
 
 export const PIPELINE_KEY = "brandPipeline_v1";
@@ -596,4 +597,52 @@ export function ensureStrictStepAccess(stepKey) {
   }
 
   return { ok: true };
+}
+
+// ✅ 중도 이탈/권한 이슈 등으로 "기업진단부터 재시작"이 필요할 때 사용
+// - 기업진단 진행률(홈 0%)을 위해 diagnosis draft/result도 함께 제거
+// - 마이페이지 히스토리(brandReportHistory)는 보존
+export function resetBrandConsultingToDiagnosisStart(reason = "reset") {
+  // 1) 브랜드 파이프라인 제거
+  try {
+    userRemoveItem(PIPELINE_KEY);
+  } catch {
+    // ignore
+  }
+
+  // 2) 브랜드 단계별 draft/result 제거
+  try {
+    Object.values(STEP_STORAGE_KEYS)
+      .flat()
+      .forEach((k) => userRemoveItem(k));
+  } catch {
+    // ignore
+  }
+
+  // 3) 기업진단 draft/result 제거(진행률 0%로)
+  const DIAG_RESET_KEYS = [
+    "diagnosisInterviewDraft_v1",
+    "diagnosisInterviewDraft",
+    "diagnosisDraft",
+    "diagnosisResult_v1",
+  ];
+  try {
+    DIAG_RESET_KEYS.forEach((k) => userRemoveItem(k));
+  } catch {
+    // ignore
+  }
+
+  // 4) 레거시(사용자 스코프 없는) 키도 함께 제거(안전)
+  try {
+    [
+      PIPELINE_KEY,
+      ...DIAG_RESET_KEYS,
+      "diagnosisResult_v1_global",
+      ...Object.values(STEP_STORAGE_KEYS).flat(),
+    ].forEach((k) => removeLegacyKey(k));
+  } catch {
+    // ignore
+  }
+
+  return { ok: true, reason };
 }

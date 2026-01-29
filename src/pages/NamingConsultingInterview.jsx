@@ -31,8 +31,10 @@ import {
   setBrandFlowCurrent,
   markBrandFlowPendingAbort,
   consumeBrandFlowPendingAbort,
-  abortBrandFlow,
+  resetBrandConsultingToDiagnosisStart,
 } from "../utils/brandPipelineStorage.js";
+
+import { saveCurrentBrandReportSnapshot } from "../utils/reportHistory.js";
 
 // ✅ 백 연동(이미 프로젝트에 존재하는 클라이언트 사용)
 import { apiRequest } from "../api/client.js";
@@ -397,10 +399,28 @@ export default function NamingConsultingInterview({ onLogout }) {
     try {
       const hadPending = consumeBrandFlowPendingAbort();
       if (hadPending) {
-        abortBrandFlow("interrupted");
+        // ✅ (미완료 포함) 지금까지 진행한 내용을 마이페이지에 스냅샷으로 저장
+        try {
+          saveCurrentBrandReportSnapshot({
+            allowIncomplete: true,
+            reason: "interrupted",
+          });
+        } catch {
+          // ignore
+        }
+
+        // ✅ 기업진단부터 다시 진행하도록 완전 초기화(진단 진행률 0%)
+        try {
+          resetBrandConsultingToDiagnosisStart("interrupted");
+        } catch {
+          // ignore
+        }
+
         window.alert(
-          "브랜드 컨설팅 진행이 중단되어, 네이밍부터 다시 시작합니다.",
+          "브랜드 컨설팅이 중단되었습니다. 기업진단부터 다시 진행해주세요.",
         );
+        navigate("/diagnosis", { replace: true });
+        return;
       }
     } catch {
       // ignore

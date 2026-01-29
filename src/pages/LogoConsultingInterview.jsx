@@ -25,7 +25,7 @@ import {
   setBrandFlowCurrent,
   markBrandFlowPendingAbort,
   consumeBrandFlowPendingAbort,
-  abortBrandFlow,
+  resetBrandConsultingToDiagnosisStart,
   setStepResult,
   clearStepsFrom,
   completeBrandFlow,
@@ -34,6 +34,7 @@ import {
 import {
   addBrandReport,
   createBrandReportSnapshot,
+  saveCurrentBrandReportSnapshot,
 } from "../utils/reportHistory.js";
 
 // ✅ 백엔드 요청(axios)
@@ -367,10 +368,26 @@ export default function LogoConsultingInterview({ onLogout }) {
     try {
       const hadPending = consumeBrandFlowPendingAbort();
       if (hadPending) {
-        abortBrandFlow("interrupted");
+        try {
+          saveCurrentBrandReportSnapshot({
+            allowIncomplete: true,
+            reason: "interrupted",
+          });
+        } catch {
+          // ignore
+        }
+
+        try {
+          resetBrandConsultingToDiagnosisStart("interrupted");
+        } catch {
+          // ignore
+        }
+
         window.alert(
-          "브랜드 컨설팅 진행이 중단되어, 네이밍부터 다시 시작합니다.",
+          "브랜드 컨설팅이 중단되었습니다. 기업진단부터 다시 진행해주세요.",
         );
+        navigate("/diagnosis", { replace: true });
+        return;
       }
     } catch {
       // ignore

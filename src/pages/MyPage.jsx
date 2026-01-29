@@ -491,6 +491,50 @@ export default function MyPage({ onLogout }) {
                   ? truncateText(storyRaw, 110)
                   : "-";
 
+                const snap0 = r?.snapshot || {};
+                const sel0 = snap0?.selections || {};
+                const diag0 = snap0?.diagnosisSummary || {};
+
+                const diagDone = Boolean(
+                  diag0?.companyName ||
+                  diag0?.brandName ||
+                  diag0?.projectName ||
+                  diag0?.oneLine ||
+                  diag0?.shortText,
+                );
+                const namingDone = Boolean(sel0?.naming);
+                const conceptDone = Boolean(sel0?.concept);
+                const storyDone = Boolean(sel0?.story);
+                const logoDone = Boolean(sel0?.logo);
+
+                const fallbackDone = [
+                  diagDone,
+                  namingDone,
+                  conceptDone,
+                  storyDone,
+                  logoDone,
+                ].filter(Boolean).length;
+
+                const fallbackPct = Math.round((fallbackDone / 5) * 100);
+
+                const storedPctRaw = Number(
+                  r?.progress?.percent ?? r?.progressPercent ?? Number.NaN,
+                );
+                const pctFromStored =
+                  Number.isFinite(storedPctRaw) && storedPctRaw > 0
+                    ? storedPctRaw
+                    : fallbackPct;
+
+                const isComplete = Boolean(
+                  r?.isDummy ? true : (r?.isComplete ?? pctFromStored >= 100),
+                );
+
+                const progressPct = Math.max(
+                  0,
+                  Math.min(100, isComplete ? 100 : pctFromStored),
+                );
+                const progressStatus = isComplete ? "완료" : "미완료";
+
                 return (
                   <article
                     key={r.id}
@@ -522,9 +566,18 @@ export default function MyPage({ onLogout }) {
                           <>
                             <div className="reportTitleRow">
                               <h4 className="reportCard__title">{company}</h4>
-                              {r?.isDummy ? (
-                                <span className="pill dummy">더미</span>
-                              ) : null}
+                              <div className="reportTitleBadges">
+                                {r?.isDummy ? (
+                                  <span className="pill dummy">더미</span>
+                                ) : null}
+                                <span
+                                  className={`pill ${
+                                    isComplete ? "complete" : "incomplete"
+                                  }`}
+                                >
+                                  {progressStatus}
+                                </span>
+                              </div>
                             </div>
 
                             <p className="reportCard__sub">
@@ -546,6 +599,29 @@ export default function MyPage({ onLogout }) {
                               · {storyPreview}
                             </p>
 
+                            <div className="reportProgress">
+                              <div className="reportProgress__row">
+                                <span className="reportProgress__label">
+                                  진행도
+                                </span>
+                                <span className="reportProgress__value">
+                                  {progressPct}%
+                                </span>
+                              </div>
+                              <div
+                                className="reportProgress__bar"
+                                role="progressbar"
+                                aria-valuenow={progressPct}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                              >
+                                <div
+                                  className="reportProgress__fill"
+                                  style={{ width: `${progressPct}%` }}
+                                />
+                              </div>
+                            </div>
+
                             <div className="reportMeta">
                               <span className="metaChip ghost">
                                 {fmt(r.createdAt)}
@@ -564,7 +640,6 @@ export default function MyPage({ onLogout }) {
                             {r.subtitle ? (
                               <p className="reportCard__sub">{r.subtitle}</p>
                             ) : null}
-
                             <div className="reportMeta">
                               {r.serviceLabel ? (
                                 <span className="metaChip">

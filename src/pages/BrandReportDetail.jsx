@@ -55,6 +55,45 @@ export default function BrandReportDetail({ onLogout }) {
   const diag = snap?.diagnosisSummary || {};
   const sel = snap?.selections || {};
 
+  const diagDone = Boolean(
+    diag?.companyName ||
+    diag?.brandName ||
+    diag?.projectName ||
+    diag?.oneLine ||
+    diag?.shortText,
+  );
+  const namingDone = Boolean(sel?.naming);
+  const conceptDone = Boolean(sel?.concept);
+  const storyDone = Boolean(sel?.story);
+  const logoDone = Boolean(sel?.logo);
+
+  const fallbackDone = [
+    diagDone,
+    namingDone,
+    conceptDone,
+    storyDone,
+    logoDone,
+  ].filter(Boolean).length;
+  const fallbackPct = Math.round((fallbackDone / 5) * 100);
+
+  const storedPctRaw = Number(
+    report?.progress?.percent ?? report?.progressPercent ?? Number.NaN,
+  );
+  const pctFromStored =
+    Number.isFinite(storedPctRaw) && storedPctRaw > 0
+      ? storedPctRaw
+      : fallbackPct;
+
+  const isComplete = Boolean(
+    report?.isDummy ? true : (report?.isComplete ?? pctFromStored >= 100),
+  );
+
+  const progressPct = Math.max(
+    0,
+    Math.min(100, isComplete ? 100 : pctFromStored),
+  );
+  const statusLabel = isComplete ? "완료" : "미완료";
+
   if (!report) {
     return (
       <div className="diagInterview consultingInterview">
@@ -117,6 +156,10 @@ export default function BrandReportDetail({ onLogout }) {
             <div className="card__head">
               <h2>{report.title}</h2>
               {report.subtitle ? <p>{report.subtitle}</p> : null}
+              <p style={{ margin: "6px 0 0", color: "#6b7280", fontSize: 13 }}>
+                상태: <strong style={{ fontWeight: 900 }}>{statusLabel}</strong>{" "}
+                · 진행도: {progressPct}%
+              </p>
               <p style={{ margin: "6px 0 0", color: "#6b7280", fontSize: 13 }}>
                 생성일: {fmt(report.createdAt)}
               </p>

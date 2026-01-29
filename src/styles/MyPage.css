@@ -549,6 +549,59 @@
   font-weight: 900;
 }
 
+.mypage-page .pill.complete {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.34);
+  color: rgba(22, 101, 52, 0.95);
+  font-weight: 900;
+}
+
+.mypage-page .pill.incomplete {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.32);
+  color: rgba(30, 64, 175, 0.95);
+  font-weight: 900;
+}
+
+.mypage-page .reportTitleBadges {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mypage-page .reportProgress {
+  margin-top: 10px;
+}
+
+.mypage-page .reportProgress__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: rgba(15, 23, 42, 0.7);
+  font-size: 12px;
+}
+
+.mypage-page .reportProgress__label {
+  font-weight: 800;
+}
+
+.mypage-page .reportProgress__bar {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.mypage-page .reportProgress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
 .mypage-page .reportPreviewChips {
   margin-top: 12px;
   display: flex;

@@ -50,6 +50,46 @@ function buildBrandSignature(pipeline) {
   return [diag, n, c, s, l].join("|");
 }
 
+function computeBrandProgress(pipeline, selections = {}) {
+  const diag = pipeline?.diagnosisSummary || {};
+  const hasDiagnosis = Boolean(
+    diag?.companyName ||
+    diag?.brandName ||
+    diag?.projectName ||
+    diag?.oneLine ||
+    diag?.shortText,
+  );
+
+  const hasNaming = Boolean(selections?.naming);
+  const hasConcept = Boolean(selections?.concept);
+  const hasStory = Boolean(selections?.story);
+  const hasLogo = Boolean(selections?.logo);
+
+  const doneSteps = {
+    diagnosis: hasDiagnosis,
+    naming: hasNaming,
+    concept: hasConcept,
+    story: hasStory,
+    logo: hasLogo,
+  };
+
+  const total = 5;
+  const done = Object.values(doneSteps).filter(Boolean).length;
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+  const clamped = Math.max(
+    0,
+    Math.min(100, Number.isFinite(percent) ? percent : 0),
+  );
+
+  return {
+    total,
+    done,
+    percent: clamped,
+    doneSteps,
+    isComplete: done === total,
+  };
+}
+
 function readList(key) {
   const raw = userGetItem(key);
   const parsed = safeParse(raw);
@@ -94,7 +134,7 @@ export function addBrandReport(report) {
   writeList(BRAND_HISTORY_KEY, next);
 }
 
-export function createBrandReportSnapshot() {
+export function createBrandReportSnapshot(opts = {}) {
   // legacy → pipeline 1회 마이그레이션
   const pipeline =
     migrateLegacyToPipelineIfNeeded?.() || readPipeline?.() || {};
@@ -126,6 +166,17 @@ export function createBrandReportSnapshot() {
   ]
     .filter(Boolean)
     .join(" · ");
+  const progress = computeBrandProgress(pipeline, {
+    naming,
+    concept,
+    story,
+    logo,
+  });
+  const statusLabel = progress?.isComplete ? "완료" : "미완료";
+  const savedReason =
+    typeof opts?.reason === "string" && opts.reason.trim()
+      ? opts.reason.trim()
+      : null;
 
   const createdAt = Date.now();
   const id = `br_${createdAt}`;
@@ -139,12 +190,39 @@ export function createBrandReportSnapshot() {
     createdAt,
     createdISO: toISO(createdAt),
     signature,
+    brandId: pipeline?.brandId ?? null,
+    isComplete: Boolean(progress?.isComplete),
+    statusLabel,
+    progress,
+    progressPercent: progress?.percent ?? 0,
+    savedReason,
     snapshot: {
       diagnosisSummary: pipeline?.diagnosisSummary || null,
       selections: { naming, concept, story, logo },
       pipeline,
     },
   };
+}
+
+export function saveCurrentBrandReportSnapshot(opts = {}) {
+  const allowIncomplete = Boolean(opts?.allowIncomplete);
+  const report = createBrandReportSnapshot({ reason: opts?.reason || null });
+  if (!report) return null;
+
+  const pct = Number(report?.progress?.percent ?? report?.progressPercent ?? 0);
+  if (!Number.isFinite(pct) || pct <= 0) return null;
+
+  if (!allowIncomplete && !report?.isComplete) return null;
+
+  addBrandReport(report);
+  return report;
+}
+
+export function saveIncompleteBrandReportSnapshot(reason = "interrupted") {
+  return saveCurrentBrandReportSnapshot({
+    allowIncomplete: true,
+    reason,
+  });
 }
 
 export function ensureBrandHistorySeeded() {

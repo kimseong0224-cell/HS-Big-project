@@ -49,17 +49,21 @@ import ChatbotWidget from "./components/ChatbotWidget.jsx";
 import CurrentUserWidget from "./components/CurrentUserWidget.jsx";
 
 import {
-  abortBrandFlow,
   isBrandFlowActive,
   isBrandFlowRoute,
+  resetBrandConsultingToDiagnosisStart,
 } from "./utils/brandPipelineStorage.js";
+
+import { saveCurrentBrandReportSnapshot } from "./utils/reportHistory.js";
 
 export default function App() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const prevPathRef = useRef(pathname);
 
-  // ✅ 브랜드 컨설팅(네이밍~로고) 진행 중 이탈 방지 + 이탈 시 네이밍부터 리셋
+  // ✅ 브랜드 컨설팅(네이밍~로고) 진행 중 이탈 방지
+  // - 중도 이탈 시: "기업진단부터 다시 진행"으로 정책 통일
+  // - 이탈 직전 상태는 (미완료 포함) 마이페이지 히스토리에 스냅샷 저장
   useEffect(() => {
     const prev = prevPathRef.current;
     if (prev === pathname) return;
@@ -68,7 +72,7 @@ export default function App() {
 
     if (leavingFlow && isBrandFlowActive()) {
       const ok = window.confirm(
-        "브랜드 컨설팅이 진행 중입니다. 지금 나가면 진행 내용이 초기화되며, 다시 시작하면 네이밍부터 진행됩니다.\n\n정말 나가시겠어요?",
+        "브랜드 컨설팅이 진행 중입니다. 지금 나가면 진행이 중단되며, 다시 시작하려면 기업진단부터 다시 진행해야 합니다.\n\n정말 나가시겠어요?",
       );
 
       if (!ok) {
@@ -77,16 +81,30 @@ export default function App() {
         return;
       }
 
-      // ✅ 이탈 확정 → 단계 결과 삭제(네이밍부터)
+      // ✅ 이탈 확정 → (미완료 포함) 스냅샷 저장 후, 진단부터 재시작 상태로 초기화
       try {
-        abortBrandFlow("leave_route");
+        saveCurrentBrandReportSnapshot({
+          allowIncomplete: true,
+          reason: "leave_route",
+        });
+      } catch {
+        // ignore
+      }
+
+      try {
+        resetBrandConsultingToDiagnosisStart("leave_route");
       } catch {
         // ignore
       }
 
       window.alert(
-        "진행이 초기화되었습니다. 다음에 다시 시작하면 네이밍부터 진행됩니다.",
+        "브랜드 컨설팅이 중단되었습니다. 기업진단부터 다시 진행해주세요.",
       );
+
+      // ✅ 어디로 가려던지 '기업진단 홈'으로 유도
+      prevPathRef.current = "/diagnosis";
+      navigate("/diagnosis", { replace: true });
+      return;
     }
 
     prevPathRef.current = pathname;
